@@ -2,20 +2,29 @@ import { useState, useRef } from 'react'
 import { C, fmt } from '../../lib/theme'
 import { Card, SLabel, StatBox, Badge, ConfBadge, Spinner, Empty } from '../shared'
 import { extractFromDocument } from '../../hooks/useFrank'
+import { useTenant } from '../../context/TenantContext'
 
 const DOC_TYPES = [
-  { id:'debtor_age',       label:'Debtor Age Analysis',  icon:'📊', category:'debtor',   color:C.warn,   desc:'Full outstanding customer balances with 30/60/90 day aging. Export from Sage, Xero, or QB.' },
-  { id:'customer_invoice', label:'Customer Invoice(s)',   icon:'🧾', category:'debtor',   color:C.warn,   desc:'Individual invoices you issued. Upload multiple at once. Frank extracts client, amount, due date.' },
-  { id:'customer_stmt',    label:'Customer Statement',   icon:'📋', category:'debtor',   color:C.warn,   desc:'Statement showing a customer\'s account history and outstanding balance.' },
-  { id:'supplier_invoice', label:'Supplier Invoice',     icon:'📬', category:'creditor', color:C.danger, desc:'Invoice from a supplier — what you owe them. Frank extracts name, amount, due date, line items.' },
-  { id:'supplier_stmt',    label:'Supplier Statement',   icon:'📑', category:'creditor', color:C.danger, desc:'Statement from your supplier showing all outstanding invoices on your account.' },
-  { id:'creditor_age',     label:'Creditor Age Analysis',icon:'📉', category:'creditor', color:C.danger, desc:'Full list of what you owe all suppliers with aging. Export from accounting software or clerk\'s Excel.' },
-  { id:'bank_statement',   label:'Bank Statement',       icon:'🏦', category:'bank',     color:C.frank,  desc:'Bank statement in any format — PDF, CSV. Frank reads every transaction and categorises it.' },
+  { id:'debtor_age',       label:'Debtor Age Analysis',  icon:'📊', category:'debtor',   color:C.warn,   desc:'Click to upload your debtor age analysis. PDF or CSV from any accounting system.' },
+  { id:'customer_invoice', label:'Customer Invoice(s)',  icon:'🧾', category:'debtor',   color:C.warn,   desc:'Click to upload customer invoices. Zeeder extracts who owes what and when it\'s due.' },
+  { id:'customer_stmt',    label:'Customer Statement',  icon:'📋', category:'debtor',   color:C.warn,   desc:'Click to upload a customer statement showing their outstanding balance.' },
+  { id:'supplier_invoice', label:'Supplier Invoice',    icon:'📬', category:'creditor', color:C.danger, desc:'Click to upload a supplier invoice. Zeeder extracts what you owe and when.' },
+  { id:'supplier_stmt',    label:'Supplier Statement',  icon:'📑', category:'creditor', color:C.danger, desc:'Click to upload a supplier statement showing all outstanding invoices.' },
+  { id:'creditor_age',     label:'Creditor Age Analysis',icon:'📉', category:'creditor', color:C.danger, desc:'Click to upload your creditor age analysis — what you owe all suppliers.' },
+  { id:'bank_statement',   label:'Bank Statement',      icon:'🏦', category:'bank',     color:C.frank,  desc:'Use CSV export from your bank\'s online portal — faster and more reliable than PDF.' },
+  { id:'payroll_report',   label:'Payroll Report',      icon:'👥', category:'payroll',  color:C.frank,  desc:'Click to upload your SimplePay or payroll export. Zeeder extracts salary totals and PAYE.' },
 ]
 
-const ACCEPTED = '.pdf,.csv,.xlsx,.xls,.jpg,.jpeg,.png,.webp'
+const BANK_CSV_TIPS = [
+  { bank: 'Absa',          steps: 'Accounts → My Statements → select date range → Download → CSV' },
+  { bank: 'Nedbank',       steps: 'Online Banking → Statements → Export → CSV/Excel' },
+  { bank: 'Standard Bank', steps: 'My accounts → Statements → Download statement → CSV' },
+  { bank: 'FNB',           steps: 'Online Banking → Accounts → Statement → Export → CSV' },
+  { bank: 'Capitec',       steps: 'Capitec Remote → Statements → Download → CSV' },
+]
 
-export function Documents({ onAsk }) {
+export function Documents({ onAsk, onNav }) {
+  const { loadBankStatement, bankData, importedData, activeTenantId, clearBankData, clearImportedDebtors, clearImportedCreditors } = useTenant()
   const [activeType, setActiveType] = useState(null)
   const [files, setFiles]           = useState([])
   const [extracting, setExtracting] = useState(false)
@@ -26,11 +35,7 @@ export function Documents({ onAsk }) {
   const selectedType = DOC_TYPES.find(d => d.id === activeType)
 
   const handleFiles = (newFiles) => {
-    const arr = Array.from(newFiles).filter(f =>
-      f.type === 'application/pdf' || f.type.startsWith('image/') ||
-      f.name.endsWith('.csv') || f.name.endsWith('.xlsx') || f.name.endsWith('.xls')
-    )
-    setFiles(arr)
+    setFiles(Array.from(newFiles))
     setResults([])
   }
 
@@ -52,7 +57,7 @@ export function Documents({ onAsk }) {
   }
 
   const allRecords = results.flatMap(r =>
-    r.data?.debtors || r.data?.creditors || r.data?.transactions || []
+    r.data?.debtors || r.data?.creditors || r.data?.transactions || r.data?.employees || []
   )
 
   return (
@@ -65,64 +70,176 @@ export function Documents({ onAsk }) {
             border: `1px solid ${tab === id ? C.frank : C.border}`,
             background: tab === id ? C.frankDim : 'transparent',
             color: tab === id ? C.frank : C.sub,
-            fontSize: 10, cursor: 'pointer', fontWeight: tab === id ? 600 : 400,
+            fontSize: 12, cursor: 'pointer', fontWeight: tab === id ? 600 : 400,
           }}>{label}</button>
         ))}
       </div>
 
       {tab === 'upload' && (
         <div>
-          <SLabel>Step 1 — What are you uploading?</SLabel>
+
+          {/* Active Uploads panel */}
+          {(() => {
+            const tenantImport = importedData?.[activeTenantId] || {}
+            const hasBankData  = bankData?.isConfirmed
+            const hasDebtors   = Array.isArray(tenantImport.DEBTORS)
+            const hasCreditors = Array.isArray(tenantImport.CREDITORS)
+            if (!hasBankData && !hasDebtors && !hasCreditors) return null
+            return (
+              <div style={{ marginBottom: 18, padding: '14px 18px', background: `${C.frank}06`, border: `1px solid ${C.frank}30`, borderRadius: 8 }}>
+                <div style={{ fontSize: 11, color: C.frank, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>Active Uploads</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {hasBankData && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 16 }}>🏦</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{bankData.bankName || 'Bank Statement'}</div>
+                          <div style={{ fontSize: 11, color: C.sub }}>{bankData.periodStart} to {bankData.periodEnd} · {(bankData.credits?.length || 0) + (bankData.debits?.length || 0)} transactions</div>
+                        </div>
+                      </div>
+                      <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: `${C.danger}08`, color: C.danger, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        ✕ Clear
+                      </button>
+                    </div>
+                  )}
+                  {hasDebtors && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 16 }}>📊</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Imported Debtors</div>
+                          <div style={{ fontSize: 11, color: C.sub }}>{tenantImport.DEBTORS.length} row{tenantImport.DEBTORS.length !== 1 ? 's' : ''} from spreadsheet</div>
+                        </div>
+                      </div>
+                      <button onClick={clearImportedDebtors} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: `${C.danger}08`, color: C.danger, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        ✕ Clear
+                      </button>
+                    </div>
+                  )}
+                  {hasCreditors && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 16 }}>📉</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Imported Creditors</div>
+                          <div style={{ fontSize: 11, color: C.sub }}>{tenantImport.CREDITORS.length} row{tenantImport.CREDITORS.length !== 1 ? 's' : ''} from spreadsheet</div>
+                        </div>
+                      </div>
+                      <button onClick={clearImportedCreditors} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: `${C.danger}08`, color: C.danger, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        ✕ Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          <SLabel>Click the document type you want to upload — Zeeder does the rest</SLabel>
+
+          {/* Hidden input lives here — sibling to cards, ref always set on mount */}
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept=".pdf,.csv,.jpg,.jpeg,.png,.webp,.xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={e => handleFiles(e.target.files)}
+          />
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 18 }}>
             {DOC_TYPES.map(t => (
-              <div key={t.id} onClick={() => setActiveType(t.id)}
-                className="hover-card"
-                style={{ background: C.card, borderRadius: 7, padding: '12px', border: `1px solid ${activeType === t.id ? t.color + '66' : C.border}`, borderLeft: `3px solid ${activeType === t.id ? t.color : C.border}`, cursor: 'pointer' }}>
+              <div
+                key={t.id}
+                onClick={() => { fileRef.current.click(); setActiveType(t.id); setFiles([]) }}
+                style={{
+                  background: C.card, borderRadius: 7, padding: '12px',
+                  border: `1px solid ${activeType === t.id ? t.color + '66' : C.border}`,
+                  borderLeft: `3px solid ${activeType === t.id ? t.color : C.border}`,
+                  cursor: 'pointer',
+                }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span style={{ fontSize: 16 }}>{t.icon}</span>
+                  <span style={{ fontSize: 19 }}>{t.icon}</span>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: activeType === t.id ? t.color : C.text }}>{t.label}</div>
-                    <div style={{ fontSize: 8, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>{t.category}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: activeType === t.id ? t.color : C.text }}>{t.label}</div>
+                    <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>{t.category}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 9, color: C.sub, lineHeight: 1.5 }}>{t.desc}</div>
+                <div style={{ fontSize: 11, color: C.sub, lineHeight: 1.5 }}>{t.desc}</div>
               </div>
             ))}
           </div>
 
-          {activeType && (
-            <>
-              <SLabel>Step 2 — Upload your {selectedType?.label}</SLabel>
-              <input ref={fileRef} type="file" multiple accept={ACCEPTED} style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
-
-              <div
-                className="drop-zone"
-                onClick={() => fileRef.current?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files) }}
-                style={{ border: `2px dashed ${files.length ? selectedType?.color + '55' : C.border}`, borderRadius: 8, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', marginBottom: 14, background: files.length ? `${selectedType?.color}06` : 'transparent' }}>
-                <div style={{ fontSize: 26, marginBottom: 8 }}>{files.length ? '✅' : selectedType?.icon}</div>
-                {files.length === 0 ? (
-                  <>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: selectedType?.color, marginBottom: 4 }}>Drop files here or click to browse</div>
-                    <div style={{ fontSize: 10, color: C.sub }}>PDF · Image (JPG/PNG) · Excel · CSV</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: selectedType?.color, marginBottom: 6 }}>{files.length} file{files.length > 1 ? 's' : ''} ready</div>
-                    {Array.from(files).map(f => <div key={f.name} style={{ fontSize: 10, color: C.sub, marginBottom: 2 }}>{f.name} · {(f.size / 1024).toFixed(0)}KB</div>)}
-                  </>
-                )}
+          {activeType === 'bank_statement' && files.length === 0 && (
+            <div style={{ marginBottom: 14, padding: '14px 18px', background: `${C.frank}08`, border: `1px solid ${C.frank}25`, borderLeft: `4px solid ${C.frank}`, borderRadius: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.frank, marginBottom: 8 }}>How to export a CSV from your bank</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {BANK_CSV_TIPS.map(tip => (
+                  <div key={tip.bank} style={{ display: 'flex', gap: 10, fontSize: 11 }}>
+                    <span style={{ color: C.text, fontWeight: 700, minWidth: 100 }}>{tip.bank}</span>
+                    <span style={{ color: C.sub }}>{tip.steps}</span>
+                  </div>
+                ))}
               </div>
-
-              <button onClick={extract} disabled={!files.length || extracting}
-                style={{ width: '100%', padding: '12px', borderRadius: 7, background: files.length && !extracting ? selectedType?.color : C.muted, border: 'none', color: C.bg, fontWeight: 700, fontSize: 13, cursor: files.length && !extracting ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                {extracting ? <><Spinner color={C.bg} size={16} /> Frank is reading your document...</> : `Extract ${selectedType?.label} data →`}
-              </button>
-            </>
+              <div style={{ marginTop: 10, fontSize: 10, color: C.dim }}>CSV uploads are ~99% accurate. PDFs work too but may need a smaller date range if they fail.</div>
+            </div>
           )}
 
-          {!activeType && <Empty message="Select a document type above to get started" />}
+          {!activeType && <Empty message="Click any document type above to choose your file" />}
+
+          {activeType && files.length === 0 && activeType !== 'bank_statement' && (
+            <div style={{ textAlign: 'center', padding: '20px', color: C.sub, fontSize: 13 }}>
+              File picker opened for <strong style={{ color: selectedType?.color }}>{selectedType?.label}</strong> — select your file
+            </div>
+          )}
+
+          {activeType === 'bank_statement' && files.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '12px', color: C.sub, fontSize: 13 }}>
+              File picker opened — select your CSV or PDF bank statement
+            </div>
+          )}
+
+          {files.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files) }}
+                onClick={() => fileRef.current?.click()}
+                style={{
+                  border: `2px dashed ${selectedType?.color}55`, borderRadius: 8,
+                  padding: '20px', textAlign: 'center', cursor: 'pointer',
+                  marginBottom: 14, background: `${selectedType?.color}06`,
+                }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>✅</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: selectedType?.color, marginBottom: 6 }}>
+                  {files.length} file{files.length > 1 ? 's' : ''} ready for {selectedType?.label}
+                </div>
+                {files.map(f => (
+                  <div key={f.name} style={{ fontSize: 12, color: C.sub, marginBottom: 2 }}>
+                    {f.name} · {(f.size / 1024).toFixed(0)} KB
+                  </div>
+                ))}
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Click to change files</div>
+              </div>
+
+              <button
+                type="button"
+                onClick={extract}
+                disabled={extracting}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 7,
+                  background: extracting ? C.muted : selectedType?.color,
+                  border: 'none', color: '#fff', fontWeight: 700, fontSize: 16,
+                  cursor: extracting ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                }}>
+                {extracting
+                  ? <><Spinner color="#fff" size={16} /> Zeeder is reading your document — this may take up to 90 seconds...</>
+                  : `Let Zeeder read this →`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -132,16 +249,34 @@ export function Documents({ onAsk }) {
             results.map((r, ri) => (
               <Card key={ri} style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: r.error ? 8 : 12 }}>
-                  <span style={{ fontSize: 16 }}>{r.category === 'bank' ? '🏦' : r.category === 'debtor' ? '📥' : '📤'}</span>
+                  <span style={{ fontSize: 16 }}>{r.category === 'bank' ? '🏦' : r.category === 'debtor' ? '📥' : r.category === 'payroll' ? '👥' : '📤'}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 700 }}>{r.file}</div>
                     {r.data?.document_type && <div style={{ fontSize: 9, color: C.sub, marginTop: 1 }}>{r.data.document_type}</div>}
                   </div>
                   <Badge label={r.error ? 'FAILED' : 'EXTRACTED ✓'} color={r.error ? C.danger : C.frank} />
+                  <button
+                    onClick={() => setResults(prev => prev.filter((_, i) => i !== ri))}
+                    title="Remove this result"
+                    style={{ padding: '2px 7px', borderRadius: 3, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 13, cursor: 'pointer', lineHeight: 1, marginLeft: 4 }}>
+                    ✕
+                  </button>
                 </div>
                 {r.error && <div style={{ padding: '8px 12px', background: `${C.danger}10`, border: `1px solid ${C.danger}33`, borderRadius: 4, fontSize: 10, color: C.danger }}>{r.error}</div>}
                 {!r.error && r.data?.notes && <div style={{ padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}33`, borderRadius: 4, fontSize: 10, color: C.sub, marginBottom: 8 }}><strong style={{ color: C.amber }}>Note: </strong>{r.data.notes}</div>}
                 {!r.error && <ResultTable data={r.data} category={r.category} onAsk={onAsk} />}
+                {!r.error && r.category === 'bank' && r.data?.transactions?.length > 0 && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 12, color: C.sub }}>
+                      {r.data.transactions.length} transactions extracted · Send to Reconciliation to match customers and suppliers
+                    </div>
+                    <button
+                      onClick={() => { loadBankStatement(r.data); onNav('reconcile') }}
+                      style={{ padding: '9px 18px', borderRadius: 5, border: `1px solid ${C.frank}40`, background: C.frankMid, color: C.frank, fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      Load into Reconciliation →
+                    </button>
+                  </div>
+                )}
               </Card>
             ))
           )}
@@ -236,6 +371,35 @@ function ResultTable({ data, category, onAsk }) {
     )
   }
 
+  if (category === 'payroll' && data?.totals) {
+    return (
+      <div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8, marginBottom: 10 }}>
+          <StatBox label="Headcount" value={data.headcount || data.employees?.length || 0} color={C.frank} />
+          <StatBox label="Gross Pay" value={fmt(data.totals.gross || 0)} color={C.text} />
+          <StatBox label="PAYE" value={fmt(data.totals.paye || 0)} color={C.warn} sub="tax" />
+          <StatBox label="UIF" value={fmt(data.totals.uif || 0)} color={C.sub} sub="insurance" />
+          <StatBox label="Net Pay" value={fmt(data.totals.net || 0)} color={C.frank} />
+        </div>
+        {data.period && <div style={{ fontSize: 10, color: C.sub, marginBottom: 8 }}>Period: {data.period}{data.pay_date ? ` · Pay date: ${data.pay_date}` : ''}{data.payroll_system ? ` · ${data.payroll_system}` : ''}</div>}
+        {data.employees?.length > 0 && (
+          <TableGrid headers={['Employee', 'Gross', 'PAYE', 'UIF', 'Net Pay', 'Confidence']}>
+            {data.employees.map((e, i) => (
+              <TableRow key={e.name || i} cells={[
+                <span style={{ fontWeight: 600 }}>{e.name}</span>,
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>{fmt(e.gross_salary || 0)}</span>,
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: C.warn }}>{fmt(e.paye || 0)}</span>,
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: C.sub }}>{fmt(e.uif || 0)}</span>,
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600, color: C.frank }}>{fmt(e.net_pay || 0)}</span>,
+                <ConfBadge value={e.confidence} />,
+              ]} />
+            ))}
+          </TableGrid>
+        )}
+      </div>
+    )
+  }
+
   return null
 }
 
@@ -245,7 +409,7 @@ function AllRecordsTable({ records, results, onAsk }) {
       {records.slice(0, 50).map((rec, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${C.muted}22` }}>
           <div style={{ flex: 1, fontSize: 10, color: C.text }}>{rec.name || rec.supplier || rec.description || '—'}</div>
-          <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: C.text }}>{fmt(rec.amount || rec.credit || rec.debit || 0)}</div>
+          <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: C.text }}>{fmt(rec.amount || rec.net_pay || rec.gross_salary || rec.credit || rec.debit || 0)}</div>
           {rec.confidence && <ConfBadge value={rec.confidence} />}
         </div>
       ))}

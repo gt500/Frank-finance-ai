@@ -11,25 +11,25 @@ export const BUSINESS = {
   children:   47,
   staff:      8,
   accounting: 'Manual (no software)',
-  bank:       'Standard Bank',
+  bank:       'Absa',
   plan:       'Starter',
   planPrice:  499,
   currency:   'ZAR',
 }
 
 export const MONTHLY = [
-  { m:'Jul', fees:128400, subsidy:28500, rev:156900, exp:138200, net:18700,  cash:48200  },
-  { m:'Aug', fees:131200, subsidy:28500, rev:159700, exp:141500, net:18200,  cash:62400  },
-  { m:'Sep', fees:129800, subsidy:28500, rev:158300, exp:155200, net:3100,   cash:58900  },
-  { m:'Oct', fees:134600, subsidy:31200, rev:165800, exp:148900, net:16900,  cash:71200  },
-  { m:'Nov', fees:136200, subsidy:31200, rev:167400, exp:162300, net:5100,   cash:68100  },
-  { m:'Dec', fees:72400,  subsidy:15600, rev:88000,  exp:98400,  net:-10400, cash:42300  },
-  { m:'Jan', fees:138800, subsidy:31200, rev:170000, exp:151200, net:18800,  cash:55800  },
-  { m:'Feb', fees:140200, subsidy:31200, rev:171400, exp:158700, net:12700,  cash:64200  },
-  { m:'Mar', fees:141500, subsidy:33800, rev:175300, exp:161200, net:14100,  cash:72400  },
-  { m:'Apr', fees:139800, subsidy:33800, rev:173600, exp:168900, net:4700,   cash:69800  },
-  { m:'May', fees:142300, subsidy:33800, rev:176100, exp:172400, net:3700,   cash:65100  },
-  { m:'Jun', fees:144000, subsidy:33800, rev:177800, exp:174200, net:3600,   cash:61400  },
+  { m:'Jul', fees:128400, subsidy:28500, rev:156900, exp:138200, net:18700,  cash:48200,  take:'School started well — R 18,700 profit in July. Fee income was steady and expenses were controlled. A good benchmark month.' },
+  { m:'Aug', fees:131200, subsidy:28500, rev:159700, exp:141500, net:18200,  cash:62400,  take:'Another solid month. R 18,200 profit. Revenue growing, costs manageable.' },
+  { m:'Sep', fees:129800, subsidy:28500, rev:158300, exp:155200, net:3100,   cash:58900,  take:'Profit dropped sharply to R 3,100 — expenses jumped by R 13,700. Worth checking what caused the spike.' },
+  { m:'Oct', fees:134600, subsidy:31200, rev:165800, exp:148900, net:16900,  cash:71200,  take:'Recovered well — R 16,900 profit. The WCED subsidy increase helped significantly.' },
+  { m:'Nov', fees:136200, subsidy:31200, rev:167400, exp:162300, net:5100,   cash:68100,  take:'Thin month: R 5,100 profit. Expenses crept up again. Watch the trend.' },
+  { m:'Dec', fees:72400,  subsidy:15600, rev:88000,  exp:98400,  net:-10400, cash:42300,  take:'December loss of R 10,400 — this happens every year. Fees halve during the holidays but staff still get paid. You need a reserve fund for next December.' },
+  { m:'Jan', fees:138800, subsidy:31200, rev:170000, exp:151200, net:18800,  cash:55800,  take:'Strong start to the year — R 18,800 profit, the best month in this period. Good fee collection after the January invoicing.' },
+  { m:'Feb', fees:140200, subsidy:31200, rev:171400, exp:158700, net:12700,  cash:64200,  take:'Decent month — R 12,700 profit. Revenue grew but so did expenses.' },
+  { m:'Mar', fees:141500, subsidy:33800, rev:175300, exp:161200, net:14100,  cash:72400,  take:'R 14,100 profit. The subsidy increase in March helped offset rising costs.' },
+  { m:'Apr', fees:139800, subsidy:33800, rev:173600, exp:168900, net:4700,   cash:69800,  take:'Profit slipped to R 4,700 as expenses grew faster than income — a pattern that is now repeating every month.' },
+  { m:'May', fees:142300, subsidy:33800, rev:176100, exp:172400, net:3700,   cash:65100,  take:'Only R 3,700 profit. The margin squeeze is getting worse — down 80% since January.' },
+  { m:'Jun', fees:144000, subsidy:33800, rev:177800, exp:174200, net:3600,   cash:61400,  take:'R 3,600 profit — the lowest non-December month. Expenses are now R 174,200 vs revenue of R 177,800. You are almost breaking even. This cannot continue without a fee increase or cost cut.' },
 ]
 
 export const WEEKLY_FORECAST = [
@@ -54,7 +54,7 @@ export const EXPENSES = [
   { name:'Food & nutrition',  value:19600, pct:11, color:'#FF6B35' },
   { name:'Learning materials',value:14200, pct:8,  color:'#3B9EFF' },
   { name:'Admin & compliance',value:8900,  pct:5,  color:'#F5C518' },
-  { name:'Other',             value:8600,  pct:5,  color:'#7A8599' },
+  { name:'Other',             value:8600,  pct:6,  color:'#7A8599' },
 ]
 
 export const DEBTORS = [
@@ -114,19 +114,19 @@ export const CASHFLOW_FLAGS = [
 
 export const HEALTH_CHECKS = [
   { id:'cf',  label:'Cash Flow Health',   score:52, status:'warn', priority:'HIGH', message:'Margin compressed 81% since Jan. Post-salary dip and fee gaps create recurring risk.',      action:'Fix fee collection + salary timing buffer' },
-  { id:'fee', label:'Fee Collection',     score:68, status:'warn', priority:'HIGH', message:'R 27,800 outstanding. 84.3% collection rate vs 95% target.',                               action:'Debit orders + 2-month suspension policy' },
-  { id:'stf', label:'Staff Cost Ratio',   score:46, status:'bad',  priority:'HIGH', message:'54% of revenue — 9 points above the 45% benchmark for sustainable educare.',               action:'Review overtime. Restructure 2 part-time roles.' },
+  { id:'fee', label:'Fee Collection',     score:68, status:'warn', priority:'HIGH', message:'R 27,800 outstanding. 84.3% collection rate vs 95% target.',                               action:'Debit orders + 2-month suspension policy',    benchmark:{ actual:'84.3%', target:'95%', warn:true } },
+  { id:'stf', label:'Staff Cost Ratio',   score:46, status:'bad',  priority:'HIGH', message:'54% of revenue — 9 points above the 45% benchmark for sustainable educare.',               action:'Review overtime. Restructure 2 part-time roles.', benchmark:{ actual:'54%', target:'45%', warn:true } },
   { id:'sub', label:'WCED Subsidy',       score:85, status:'good', priority:'LOW',  message:'Subsidy current. Registers compliant.',                                                     action:'Submit Q3 registers by 31 July' },
-  { id:'run', label:'Runway',             score:60, status:'warn', priority:'MED',  message:'4.1 months. December repeat is 5 months away.',                                            action:'Build R 80k holiday reserve by November' },
+  { id:'run', label:'Runway',             score:60, status:'warn', priority:'MED',  message:'4.1 months. December repeat is 5 months away.',                                            action:'Build R 80k holiday reserve by November',     benchmark:{ actual:'4.1 months', target:'3+ months', warn:false } },
   { id:'cmp', label:'Compliance',         score:88, status:'good', priority:'LOW',  message:'DSD, NPO, SACE all current.',                                                              action:'Renew municipal zoning by 15 Aug' },
 ]
 
-export const FRANK_SYSTEM_PROMPT = `You are Frank, a real-time operational finance AI for South African small businesses. You are currently working with Wonderland Educare — an early childhood development centre in Brackenfell, Cape Town (47 learners, 8 staff, no accounting software).
+export const FRANK_SYSTEM_PROMPT = `You are Zeeder, a real-time operational finance AI for South African small businesses. You are currently working with Wonderland Educare — an early childhood development centre in Brackenfell, Cape Town (47 learners, 8 staff, no accounting software).
 
 DATA SOURCES: Standard Bank statement (uploaded monthly) + Debtor list (Excel) + Creditor list (Excel).
 
 CURRENT FINANCIAL POSITION:
-- Cash: R 61,400 (Standard Bank)
+- Cash: R 61,400 (Absa)
 - Monthly Revenue: R 177,800 (R 144,000 fees + R 33,800 WCED subsidy)
 - Monthly Expenses: R 174,200 (GROWING FASTER THAN REVENUE)
 - Net Margin: R 3,600/month (down 81% from R 18,800 in January — CRITICAL)

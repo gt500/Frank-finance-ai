@@ -8,39 +8,81 @@ import { Documents } from './components/views/Documents'
 import { Debtors } from './components/views/Debtors'
 import { Creditors } from './components/views/Creditors'
 import { Connections } from './components/views/Connections'
+import { Reconciliation } from './components/views/Reconciliation'
 import { Chat } from './components/views/Chat'
 import { useFrank } from './hooks/useFrank'
+import { useWonderlandData } from './hooks/useWonderlandData'
+import { useSimplePayData } from './hooks/useSimplePayData'
 import { C } from './lib/theme'
-import { FRANK_SYSTEM_PROMPT } from './data/wonderland'
+import { TenantProvider, useTenant } from './context/TenantContext'
+import { Landing } from './pages/Landing'
+import { Login } from './pages/Login'
+import { Onboarding } from './pages/Onboarding'
 
 const VIEW_LABELS = {
-  dashboard: 'Dashboard',
-  cashflow:  'Cash Flow',
-  reports:   'Reports',
-  health:    'Business Health',
-  documents: 'Upload Documents',
-  ar:        'Debtors',
-  ap:        'Creditors',
-  connect:   'Connections',
-  chat:      'Ask Frank',
+  dashboard:  'Dashboard',
+  cashflow:   'Cash Flow',
+  reports:    'Reports',
+  health:     'Business Health',
+  documents:  'Upload Documents',
+  ar:         'Debtors',
+  ap:         'Creditors',
+  reconcile:  'Reconciliation',
+  connect:    'Connections',
+  chat:       'Ask Zeeder',
 }
 
 export default function App() {
+  return (
+    <TenantProvider>
+      <AppContent />
+    </TenantProvider>
+  )
+}
+
+function AppContent() {
+  const { tenant, systemPrompt, currentUser, login, registerAccount } = useTenant()
+  const [authMode, setAuthMode] = useState('login') // 'login' | 'onboarding'
   const [view, setView] = useState('dashboard')
+
+  // Live data hooks — Wonderland-specific; other tenants get null
+  const { data: liveData, loading, error } = useWonderlandData()
+  const { data: payrollData, error: payrollError } = useSimplePayData()
+  const isWonderland = tenant.id === 'wonderland-educare'
+
   const frank = useFrank([{
     role: 'assistant',
-    content: `Morning, Bev. Here's your Wonderland snapshot:\n\n**Cash: R 61,400** · **Revenue: R 177,800/mo** · **Margin: R 3,600** ⚠️\n\n3 things need attention:\n1. Salary run on 25 July drops cash by R 94,500 — collect fees before then\n2. Smith family fee (R 9,000) is 3 months overdue — write-off risk\n3. Margin has dropped 81% since January — costs growing faster than revenue\n\nWant me to build a 90-day action plan?`,
+    content: `Good morning. Here's your ${tenant.name} snapshot:\n\n**Cash: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.cash?.toLocaleString('en-ZA') ?? '—'}** · **Revenue: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.rev?.toLocaleString('en-ZA') ?? '—'}/mo**\n\nAsk me anything about your finances.`,
   }])
 
   const goChat = useCallback((question) => {
     setView('chat')
     if (question) {
-      setTimeout(() => frank.send(question, FRANK_SYSTEM_PROMPT), 100)
+      setTimeout(() => frank.send(question, systemPrompt), 100)
     }
-  }, [frank])
+  }, [frank, systemPrompt])
 
-  const views = { dashboard, cashflow, reports, health, documents, ar: debtors, ap: creditors, connect, chat }
-  const viewProps = { onAsk: goChat, frank }
+  const viewProps = {
+    onAsk: goChat,
+    frank,
+    liveData:     isWonderland ? liveData    : null,
+    loading:      isWonderland ? loading     : false,
+    error:        isWonderland ? error       : null,
+    payrollData:  isWonderland ? payrollData : null,
+    payrollError: isWonderland ? payrollError : null,
+  }
+
+  if (!currentUser) {
+    if (authMode === 'onboarding') {
+      return (
+        <Onboarding
+          onComplete={(form) => { registerAccount(form) }}
+          onBack={() => setAuthMode('login')}
+        />
+      )
+    }
+    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} />
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
@@ -48,30 +90,35 @@ export default function App() {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Top bar */}
-        <div style={{ padding: '11px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: C.bg }}>
+        <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: C.bg }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{VIEW_LABELS[view]}</div>
-            <div style={{ fontSize: 9, color: C.muted, marginTop: 1 }}>
-              Wonderland Educare · {new Date().toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: 0.5 }}>{VIEW_LABELS[view]}</div>
+            <div style={{ fontSize: 13, color: C.sub, marginTop: 2, letterSpacing: 0.5 }}>
+              {tenant.name} · {new Date().toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
             </div>
           </div>
-          <button onClick={() => goChat('Give me a complete financial briefing for Wonderland Educare with cashflow risks and the 3 most urgent actions')}
-            style={{ padding: '6px 14px', borderRadius: 5, border: `1px solid ${C.frank}44`, background: C.frankDim, color: C.frank, cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+          <button onClick={() => goChat(`Give me a complete financial briefing for ${tenant.name} with cashflow risks and the 3 most urgent actions`)}
+            style={{
+              padding: '7px 16px', borderRadius: 4, border: `1px solid ${C.frank}30`,
+              background: C.frankDim, color: C.frank, cursor: 'pointer',
+              fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase',
+            }}>
             ⚡ Full Briefing
           </button>
         </div>
 
         {/* Page content */}
         <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
-          {view === 'dashboard'  && <Dashboard  {...viewProps} />}
-          {view === 'cashflow'   && <CashFlow   {...viewProps} />}
-          {view === 'reports'    && <Reports    {...viewProps} />}
-          {view === 'health'     && <Health     {...viewProps} />}
-          {view === 'documents'  && <Documents  {...viewProps} />}
-          {view === 'ar'         && <Debtors    {...viewProps} />}
-          {view === 'ap'         && <Creditors  {...viewProps} />}
-          {view === 'connect'    && <Connections {...viewProps} />}
-          {view === 'chat'       && <Chat       frank={frank} />}
+          {view === 'dashboard'  && <Dashboard     {...viewProps} />}
+          {view === 'cashflow'   && <CashFlow      {...viewProps} />}
+          {view === 'reports'    && <Reports       {...viewProps} />}
+          {view === 'health'     && <Health        {...viewProps} />}
+          {view === 'documents'  && <Documents     {...viewProps} onNav={setView} />}
+          {view === 'ar'         && <Debtors       {...viewProps} onNav={setView} />}
+          {view === 'ap'         && <Creditors     {...viewProps} onNav={setView} />}
+          {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
+          {view === 'connect'    && <Connections   {...viewProps} />}
+          {view === 'chat'       && <Chat          frank={frank} />}
         </div>
       </div>
     </div>
