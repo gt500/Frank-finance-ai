@@ -1,4 +1,5 @@
 import { C } from '../../lib/theme'
+import { useTenant } from '../../context/TenantContext'
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 
@@ -56,6 +57,8 @@ function ConnCard({ icon, name, desc, status, detail, onAsk, askQ }) {
 }
 
 export function Connections({ onAsk, liveData, loading, error, payrollData, payrollError }) {
+  const { tenant } = useTenant()
+  const isWonderland = tenant.id === 'wonderland-educare'
   const claudeOk  = API_KEY && !API_KEY.startsWith('your-')
   const financeOk = !loading && !error && liveData != null
   const financeErr = !loading && !!error
@@ -81,44 +84,51 @@ export function Connections({ onAsk, liveData, loading, error, payrollData, payr
           askQ={claudeOk ? 'Give me a quick financial summary of the business right now' : null}
         />
 
-        <ConnCard
-          icon="🏫"
-          name="Wonderland Finance API"
-          desc="Live feed of income, expenses, outstanding fees, and learner data direct from Wonderland's management system."
-          status={loading ? 'soon' : financeOk ? 'live' : financeErr ? 'error' : 'off'}
-          detail={
-            loading ? 'Connecting...' :
-            financeOk ? `${liveData?.children?.length ?? '—'} learners · ${liveData?.payments?.length ?? '—'} payment records loaded` :
-            financeErr ? `Connection failed: ${error}` : null
-          }
-          onAsk={onAsk}
-          askQ={financeOk ? 'What does the live Wonderland data tell us about cash flow this month?' : null}
-        />
+        {/* Wonderland's live management-system feed and SimplePay payroll are
+            specific to that one real client — never render them for another
+            tenant, even if the live-data hooks happen to have data cached. */}
+        {isWonderland && (
+          <ConnCard
+            icon="🏫"
+            name="Wonderland Finance API"
+            desc="Live feed of income, expenses, outstanding fees, and learner data direct from Wonderland's management system."
+            status={loading ? 'soon' : financeOk ? 'live' : financeErr ? 'error' : 'off'}
+            detail={
+              loading ? 'Connecting...' :
+              financeOk ? `${liveData?.children?.length ?? '—'} learners · ${liveData?.payments?.length ?? '—'} payment records loaded` :
+              financeErr ? `Connection failed: ${error}` : null
+            }
+            onAsk={onAsk}
+            askQ={financeOk ? 'What does the live Wonderland data tell us about cash flow this month?' : null}
+          />
+        )}
 
-        <ConnCard
-          icon="👥"
-          name="SimplePay Payroll"
-          desc="Pulls live employee records and pay run history from SimplePay. Used to monitor salary costs and payroll dates."
-          status={payrollOk ? 'live' : payrollErr ? 'error' : 'off'}
-          detail={
-            payrollOk
-              ? `${payrollData?.employees?.length ?? '—'} employees · ${payrollData?.payRuns?.length ?? '—'} pay runs`
-              : payrollErr
-              ? 'SimplePay API not responding — upload a payroll PDF instead'
-              : 'Not connected — check VITE_SIMPLEPAY_API_KEY in .env'
-          }
-          onAsk={onAsk}
-          askQ={payrollOk ? 'Summarise the payroll data — headcount, total salary cost, and next pay date' : null}
-        />
+        {isWonderland && (
+          <ConnCard
+            icon="👥"
+            name="SimplePay Payroll"
+            desc="Pulls live employee records and pay run history from SimplePay. Used to monitor salary costs and payroll dates."
+            status={payrollOk ? 'live' : payrollErr ? 'error' : 'off'}
+            detail={
+              payrollOk
+                ? `${payrollData?.employees?.length ?? '—'} employees · ${payrollData?.payRuns?.length ?? '—'} pay runs`
+                : payrollErr
+                ? 'SimplePay API not responding — upload a payroll PDF instead'
+                : 'Not connected — check VITE_SIMPLEPAY_API_KEY in .env'
+            }
+            onAsk={onAsk}
+            askQ={payrollOk ? 'Summarise the payroll data — headcount, total salary cost, and next pay date' : null}
+          />
+        )}
 
         <ConnCard
           icon="🏦"
-          name="Absa Bank Feed"
-          desc="Direct bank feed for real-time transaction monitoring. Eliminates the need to upload bank statements manually."
+          name={`${tenant.bank || 'Bank'} Feed`}
+          desc={`Direct bank feed for real-time transaction monitoring with ${tenant.bank || 'your bank'}. Eliminates the need to upload bank statements manually.`}
           status="soon"
           detail="Coming in next release — upload your bank statement PDF in the meantime"
           onAsk={onAsk}
-          askQ="What would a live Absa bank feed add to my financial visibility?"
+          askQ={`What would a live ${tenant.bank || 'bank'} feed add to my financial visibility?`}
         />
 
         <ConnCard

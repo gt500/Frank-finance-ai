@@ -41,15 +41,18 @@ export function Sidebar({ view, onNav, onAsk }) {
         flexDirection: 'column',
         flexShrink: 0,
         height: '100vh',
+        overflow: 'hidden',
       }}>
 
-        {/* Logo */}
-        <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ position: 'relative' }}>
-            <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '100%', display: 'block', marginBottom: -28 }} />
-            <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', paddingBottom: 4 }}>
-              Finance OS
-            </div>
+        {/* Logo — source PNG is a 500x500 square with the wordmark sitting in
+            a thin band roughly a third of the way down, so the display area
+            is cropped (top-aligned, overflow hidden) to just that band. */}
+        <div style={{ padding: '6px 16px 4px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ width: '70%', margin: '0 auto', height: 76, overflow: 'hidden' }}>
+            <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '100%', display: 'block' }} />
+          </div>
+          <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center', marginTop: 2 }}>
+            Finance OS
           </div>
         </div>
 
@@ -75,7 +78,7 @@ export function Sidebar({ view, onNav, onAsk }) {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto' }}>
+        <nav style={{ flex: 1, minHeight: 0, padding: '10px 10px', overflowY: 'auto' }}>
           {NAV_ITEMS.map(n => {
             const active    = view === n.id
             const badgeVal  = n.badgeKey ? badges[n.badgeKey] : null
@@ -118,7 +121,7 @@ export function Sidebar({ view, onNav, onAsk }) {
         </nav>
 
         {/* Plan footer */}
-        <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ flexShrink: 0, padding: '14px 20px', borderTop: `1px solid ${C.border}` }}>
 
           {/* User info row */}
           {currentUser && (

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { C, fmt } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
+import { buildTransactionsCsv, downloadCsv } from '../../lib/exportCsv'
+import { CHART_OF_ACCOUNTS, mapCategory } from '../../data/chartOfAccounts'
 
 function Section({ title, subtitle, children, accent }) {
   return (
@@ -80,8 +82,35 @@ function TxRow({ tx, type, onRename, onAsk }) {
   )
 }
 
+function CategoryMapRow({ category, count, accountCode, onChange }) {
+  const needsReview = accountCode === '9999'
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1fr 70px 1fr', gap: 10, alignItems: 'center',
+      padding: '9px 14px', borderBottom: `1px solid ${C.border}`,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>
+        {category}
+        {needsReview && <span style={{ marginLeft: 8, fontSize: 9, letterSpacing: 1, padding: '1px 6px', borderRadius: 3, background: `${C.warn}15`, color: C.warn, border: `1px solid ${C.warn}30`, fontWeight: 700 }}>REVIEW</span>}
+      </div>
+      <div style={{ fontSize: 11, color: C.dim, fontFamily: 'var(--mono)' }}>{count} tx</div>
+      <select
+        value={accountCode}
+        onChange={e => onChange(category, e.target.value)}
+        style={{
+          background: '#0a1828', border: `1px solid ${needsReview ? C.warn : C.border}`,
+          color: C.text, borderRadius: 3, padding: '5px 8px', fontSize: 12, outline: 'none',
+        }}>
+        {CHART_OF_ACCOUNTS.map(a => (
+          <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export function Reconciliation({ onAsk, onNav }) {
-  const { bankData, loadBankStatement, updateEntityName, confirmBankReconciliation, clearBankData } = useTenant()
+  const { bankData, loadBankStatement, updateEntityName, confirmBankReconciliation, clearBankData, categoryMap, setCategoryMapping } = useTenant()
   const [tab, setTab] = useState('all')
 
   if (!bankData) {
@@ -118,6 +147,14 @@ export function Reconciliation({ onAsk, onNav }) {
   const visibleCredits = tab === 'unmatched' ? unmatchedCredits : credits
   const visibleDebits  = tab === 'unmatched' ? unmatchedDebits  : debits
 
+  const categoryCounts = {}
+  ;[...credits, ...debits].forEach(t => {
+    const key = t.category || 'Unknown'
+    categoryCounts[key] = (categoryCounts[key] || 0) + 1
+  })
+  const categories = Object.keys(categoryCounts).sort()
+  const uncategorizedCount = categories.filter(cat => mapCategory(cat, categoryMap) === '9999').length
+
   return (
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
 
@@ -130,11 +167,19 @@ export function Reconciliation({ onAsk, onNav }) {
               {bankName} · {periodStart} to {periodEnd} · Closing balance: <strong style={{ color: C.frank }}>{fmt(closingBalance)}</strong>
             </div>
           </div>
-          <button
-            onClick={clearBankData}
-            style={{ padding: '6px 12px', borderRadius: 4, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer' }}>
-            Clear ×
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => downloadCsv(`transactions_${periodStart}_to_${periodEnd}.csv`, buildTransactionsCsv(bankData, categoryMap))}
+              title="Download this statement's transactions as a CSV your accountant can import into Xero, QuickBooks, or Sage"
+              style={{ padding: '6px 12px', borderRadius: 4, border: `1px solid ${C.frank}30`, background: C.frankDim, color: C.frank, fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
+              Export CSV
+            </button>
+            <button
+              onClick={clearBankData}
+              style={{ padding: '6px 12px', borderRadius: 4, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer' }}>
+              Clear ×
+            </button>
+          </div>
         </div>
       </div>
 
@@ -226,6 +271,28 @@ export function Reconciliation({ onAsk, onNav }) {
               All transactions matched
             </div>
           )}
+        </Section>
+
+        {/* ── Chart of Accounts Mapping ───────────────── */}
+        <Section
+          title="Chart of Accounts Mapping"
+          subtitle={`${uncategorizedCount > 0 ? `${uncategorizedCount} categories need an account assigned` : 'All categories mapped'} — this decides the "Account" column in your CSV export`}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 1fr', gap: 10, padding: '6px 14px', marginBottom: 4 }}>
+            {['Category (from statement)', 'Count', 'Maps to Account'].map(h => (
+              <div key={h} style={{ fontSize: 9, color: C.dim, letterSpacing: 2, textTransform: 'uppercase' }}>{h}</div>
+            ))}
+          </div>
+          <div style={{ border: `1px solid ${C.border}`, borderRadius: 4, overflow: 'hidden' }}>
+            {categories.map(cat => (
+              <CategoryMapRow
+                key={cat}
+                category={cat}
+                count={categoryCounts[cat]}
+                accountCode={mapCategory(cat, categoryMap)}
+                onChange={setCategoryMapping}
+              />
+            ))}
+          </div>
         </Section>
 
         {/* ── Confirm CTA ────────────────────────────── */}

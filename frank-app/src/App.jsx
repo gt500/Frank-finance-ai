@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './components/views/Dashboard'
 import { CashFlow } from './components/views/CashFlow'
@@ -55,6 +55,15 @@ function AppContent() {
     content: `Good morning. Here's your ${tenant.name} snapshot:\n\n**Cash: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.cash?.toLocaleString('en-ZA') ?? '—'}** · **Revenue: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.rev?.toLocaleString('en-ZA') ?? '—'}/mo**\n\nAsk me anything about your finances.`,
   }])
 
+  // useFrank's message history lives in this component's state, which does
+  // NOT remount on tenant switch — without this, old messages (and their
+  // tenant-specific content) would stay in the array and get sent back to
+  // Claude as context after switching to a different tenant.
+  useEffect(() => {
+    frank.reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant.id])
+
   const goChat = useCallback((question) => {
     setView('chat')
     if (question) {
@@ -76,7 +85,7 @@ function AppContent() {
     if (authMode === 'onboarding') {
       return (
         <Onboarding
-          onComplete={(form) => { registerAccount(form) }}
+          onComplete={(form) => { registerAccount(form, form.bankExtract) }}
           onBack={() => setAuthMode('login')}
         />
       )

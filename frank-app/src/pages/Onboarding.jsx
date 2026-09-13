@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { C, FONT_BODY } from '../lib/theme'
+import { extractFromDocument } from '../hooks/useFrank'
 
 const SECTORS = [
   'Retail', 'Food & Beverage', 'Early Childhood Education', 'Healthcare',
@@ -49,7 +50,7 @@ function Field({ label, error, children }) {
   )
 }
 
-const STEP_LABELS = ['Your account', 'Your business', 'Choose a plan', "You're in!"]
+const STEP_LABELS = ['Your account', 'Your business', 'Choose a plan', 'Add your data', "You're in!"]
 
 export function Onboarding({ onComplete, onBack }) {
   const [step, setStep] = useState(0)
@@ -57,6 +58,7 @@ export function Onboarding({ onComplete, onBack }) {
     name: '', email: '', password: '', confirmPassword: '',
     businessName: '', sector: '', location: '', staff: '',
     plan: 'growth',
+    bankExtract: null,
   })
   const [errors, setErrors] = useState({})
 
@@ -130,7 +132,7 @@ export function Onboarding({ onComplete, onBack }) {
 
       {/* Step card */}
       <div style={{
-        width: '100%', maxWidth: step === 2 ? 660 : 480,
+        width: '100%', maxWidth: step === 2 ? 660 : 520,
         background: C.card, border: `1px solid ${C.border}`,
         borderRadius: 12, padding: '36px 40px',
         boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
@@ -138,7 +140,8 @@ export function Onboarding({ onComplete, onBack }) {
         {step === 0 && <StepAccount form={form} set={set} errors={errors} onNext={handleNext} onBack={onBack} />}
         {step === 1 && <StepBusiness form={form} set={set} errors={errors} onNext={handleNext} onBack={() => setStep(0)} />}
         {step === 2 && <StepPlan form={form} set={set} onNext={handleNext} onBack={() => setStep(1)} />}
-        {step === 3 && <StepReady form={form} onEnter={() => onComplete(form)} />}
+        {step === 3 && <StepUpload form={form} set={set} onNext={handleNext} onBack={() => setStep(2)} />}
+        {step === 4 && <StepReady form={form} onEnter={() => onComplete(form)} />}
       </div>
     </div>
   )
@@ -279,7 +282,75 @@ function StepPlan({ form, set, onNext, onBack }) {
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onBack} style={btnBack}>← Back</button>
-        <button onClick={onNext} style={btnPrimary}>Create my account →</button>
+        <button onClick={onNext} style={btnPrimary}>Continue →</button>
+      </div>
+    </>
+  )
+}
+
+function StepUpload({ form, set, onNext, onBack }) {
+  const [file, setFile]           = useState(null)
+  const [extracting, setExtracting] = useState(false)
+  const [error, setError]         = useState('')
+  const fileRef = useRef(null)
+
+  async function handleExtract() {
+    if (!file) return
+    setExtracting(true)
+    setError('')
+    try {
+      const data = await extractFromDocument(file, 'bank')
+      set('bankExtract', data)
+    } catch (e) {
+      setError(e.message || 'Could not read this file — try a different one, or skip for now.')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  return (
+    <>
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6 }}>Add your first data</div>
+        <div style={{ fontSize: 13, color: C.sub }}>
+          Optional — upload a bank statement now and your dashboard is ready the moment you sign in. You can always do this later from Documents.
+        </div>
+      </div>
+
+      <div
+        onClick={() => fileRef.current?.click()}
+        style={{
+          border: `1.5px dashed ${form.bankExtract ? C.frank : C.border}`,
+          borderRadius: 8, padding: '30px 20px', textAlign: 'center', cursor: 'pointer',
+          background: form.bankExtract ? C.frankMid : C.bg, marginBottom: 14,
+        }}>
+        <input
+          ref={fileRef} type="file" accept=".csv,.pdf,.xlsx,.xls,.txt" style={{ display: 'none' }}
+          onChange={e => { setFile(e.target.files[0] || null); set('bankExtract', null); setError('') }}
+        />
+        <div style={{ fontSize: 28, marginBottom: 8 }}>🏦</div>
+        <div style={{ fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 4 }}>
+          {file ? file.name : 'Click to choose a bank statement'}
+        </div>
+        <div style={{ fontSize: 11, color: C.dim }}>CSV works best — PDF and Excel also supported</div>
+      </div>
+
+      {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 14 }}>{error}</div>}
+      {form.bankExtract && (
+        <div style={{ fontSize: 12, color: C.frank, marginBottom: 14 }}>
+          ✓ Statement read — {form.bankExtract.transactions?.length ?? 0} transactions found. Your dashboard will be ready when you sign in.
+        </div>
+      )}
+
+      {file && !form.bankExtract && (
+        <button onClick={handleExtract} disabled={extracting} style={{ ...btnPrimary, width: '100%', marginBottom: 14, opacity: extracting ? 0.6 : 1 }}>
+          {extracting ? 'Reading statement…' : 'Extract this statement'}
+        </button>
+      )}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onBack} style={btnBack}>← Back</button>
+        <button onClick={onNext} style={btnPrimary}>{form.bankExtract ? 'Create my account →' : 'Skip for now →'}</button>
       </div>
     </>
   )
@@ -308,6 +379,7 @@ function StepReady({ form, onEnter }) {
           ['Location', form.location],
           ['Plan', `${plan?.name} · R ${plan?.price}/mo (14-day trial)`],
           ['Email', form.email],
+          ['Bank statement', form.bankExtract ? `${form.bankExtract.transactions?.length ?? 0} transactions loaded` : 'Not uploaded — add anytime in Documents'],
         ].map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
             <span style={{ color: C.dim }}>{label}</span>

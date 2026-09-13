@@ -27,6 +27,66 @@ function findMatch(description, knownNames) {
   }) || null
 }
 
+// Shared by loadBankStatement (existing tenant) and registerAccount (brand
+// new tenant, onboarding) — takes the raw AI extraction and the target
+// tenant's own debtor/creditor names, so it never matches against another
+// tenant's data.
+function buildBankData(extractedData, debtorNames, creditorNames) {
+  const {
+    transactions = [],
+    bank_name = 'Bank',
+    period_start = '',
+    period_end = '',
+    opening_balance = 0,
+    closing_balance = 0,
+  } = extractedData
+
+  const credits = transactions
+    .filter(t => (t.credit || 0) > 0)
+    .map((t, i) => {
+      const matched = findMatch(t.description, debtorNames)
+      return {
+        id: `cr-${i}`,
+        date: t.date,
+        description: t.description,
+        amount: t.credit,
+        entityName: matched || extractEntityName(t.description),
+        matchedName: matched,
+        category: t.category || 'Unknown',
+        confirmed: false,
+      }
+    })
+
+  const debits = transactions
+    .filter(t => (t.debit || 0) > 0)
+    .map((t, i) => {
+      const matched = findMatch(t.description, creditorNames)
+      return {
+        id: `db-${i}`,
+        date: t.date,
+        description: t.description,
+        amount: t.debit,
+        entityName: matched || extractEntityName(t.description),
+        matchedName: matched,
+        category: t.category || 'Unknown',
+        confirmed: false,
+      }
+    })
+
+  return {
+    bankName: bank_name,
+    periodStart: period_start,
+    periodEnd: period_end,
+    openingBalance: opening_balance,
+    closingBalance: closing_balance,
+    credits,
+    debits,
+    isConfirmed: false,
+    confirmedDebtors: null,
+    confirmedCreditors: null,
+  }
+}
+
 const DEMO_ACCOUNTS = [
   { email: 'admin@capefresh.co.za', password: import.meta.env.VITE_DEMO_PASSWORD, name: 'Cape Fresh Admin', tenantId: 'cape-fresh-grocery' },
 ]
@@ -129,6 +189,9 @@ export function TenantProvider({ children }) {
   const [importedData, setImportedData] = useState(() => {
     try { return JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}') } catch { return {} }
   })
+  const [categoryMaps, setCategoryMaps] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('zeeder_category_map') || '{}') } catch { return {} }
+  })
 
   const allTenants = useMemo(() => [...TENANTS, ...customTenants], [customTenants])
   const tenant = useMemo(() => allTenants.find(t => t.id === activeTenantId) || allTenants[0], [allTenants, activeTenantId])
@@ -168,6 +231,12 @@ export function TenantProvider({ children }) {
     const updated = { ...importedData, [activeTenantId]: tenantImport }
     setImportedData(updated)
     localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
+  }
+
+  function setCategoryMapping(rawCategory, accountCode) {
+    const updated = { ...categoryMaps, [activeTenantId]: { ...(categoryMaps[activeTenantId] || {}), [rawCategory]: accountCode } }
+    setCategoryMaps(updated)
+    localStorage.setItem('zeeder_category_map', JSON.stringify(updated))
   }
 
   function login(email, password) {
@@ -210,7 +279,7 @@ export function TenantProvider({ children }) {
     }
   }
 
-  function registerAccount(form) {
+  function registerAccount(form, bankExtract) {
     const email = form.email.trim().toLowerCase()
     if (accounts.find(a => a.email === email)) {
       return { ok: false, error: 'An account with this email already exists' }
@@ -230,6 +299,14 @@ export function TenantProvider({ children }) {
     localStorage.setItem('zeeder_user', JSON.stringify(user))
     setActiveTenantId(newTenant.id)
     localStorage.setItem('zeeder_tenant', newTenant.id)
+
+    // Uses newTenant's own (empty) debtor/creditor lists, never the
+    // previously-active tenant's — this new tenant has no data to leak into.
+    if (bankExtract) {
+      const debtorNames   = newTenant.data.DEBTORS.map(d => d.name)
+      const creditorNames = newTenant.data.CREDITORS.map(c => c.name || c.supplier)
+      setBankData(buildBankData(bankExtract, debtorNames, creditorNames))
+    }
     return { ok: true }
   }
 
@@ -248,62 +325,9 @@ export function TenantProvider({ children }) {
   function lockAdmin() { setAdminUnlocked(false) }
 
   function loadBankStatement(extractedData) {
-    const {
-      transactions = [],
-      bank_name = 'Bank',
-      period_start = '',
-      period_end = '',
-      opening_balance = 0,
-      closing_balance = 0,
-    } = extractedData
-
     const debtorNames   = (tenant.data.DEBTORS  || []).map(d => d.name)
     const creditorNames = (tenant.data.CREDITORS || []).map(c => c.name || c.supplier)
-
-    const credits = transactions
-      .filter(t => (t.credit || 0) > 0)
-      .map((t, i) => {
-        const matched = findMatch(t.description, debtorNames)
-        return {
-          id: `cr-${i}`,
-          date: t.date,
-          description: t.description,
-          amount: t.credit,
-          entityName: matched || extractEntityName(t.description),
-          matchedName: matched,
-          category: t.category || 'Unknown',
-          confirmed: false,
-        }
-      })
-
-    const debits = transactions
-      .filter(t => (t.debit || 0) > 0)
-      .map((t, i) => {
-        const matched = findMatch(t.description, creditorNames)
-        return {
-          id: `db-${i}`,
-          date: t.date,
-          description: t.description,
-          amount: t.debit,
-          entityName: matched || extractEntityName(t.description),
-          matchedName: matched,
-          category: t.category || 'Unknown',
-          confirmed: false,
-        }
-      })
-
-    setBankData({
-      bankName: bank_name,
-      periodStart: period_start,
-      periodEnd: period_end,
-      openingBalance: opening_balance,
-      closingBalance: closing_balance,
-      credits,
-      debits,
-      isConfirmed: false,
-      confirmedDebtors: null,
-      confirmedCreditors: null,
-    })
+    setBankData(buildBankData(extractedData, debtorNames, creditorNames))
   }
 
   function updateEntityName(type, id, newName) {
@@ -381,6 +405,12 @@ export function TenantProvider({ children }) {
       delete imp[tenantId]
       localStorage.setItem('zeeder_imported_data', JSON.stringify(imp))
     } catch {}
+    try {
+      const catMap = JSON.parse(localStorage.getItem('zeeder_category_map') || '{}')
+      delete catMap[tenantId]
+      setCategoryMaps(catMap)
+      localStorage.setItem('zeeder_category_map', JSON.stringify(catMap))
+    } catch {}
     setCurrentUser(null)
     localStorage.removeItem('zeeder_user')
     localStorage.removeItem('zeeder_tenant')
@@ -415,6 +445,8 @@ export function TenantProvider({ children }) {
       clearImportedDebtors,
       clearImportedCreditors,
       importedData,
+      categoryMap: categoryMaps[activeTenantId] || {},
+      setCategoryMapping,
     }}>
       {children}
     </TenantContext.Provider>

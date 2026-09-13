@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { C, fmt } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 import { SpreadsheetImporter } from '../SpreadsheetImporter'
+import { buildCreditorsCsv, downloadCsv } from '../../lib/exportCsv'
 
 function statusBadge(c) {
   if (c.overdue)        return { label: 'OVERDUE',       color: C.danger }
@@ -48,9 +49,17 @@ export function Creditors({ onAsk, onNav }) {
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
 
       {/* ── Page Header ──────────────────────────────────────── */}
-      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, background: C.card }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Bills to Pay</div>
-        <div style={{ fontSize: 13, color: C.sub }}>Everything you currently owe to suppliers — amounts, due dates, and which ones to pay first.</div>
+      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, background: C.card, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Bills to Pay</div>
+          <div style={{ fontSize: 13, color: C.sub }}>Everything you currently owe to suppliers — amounts, due dates, and which ones to pay first.</div>
+        </div>
+        <button
+          onClick={() => downloadCsv('creditors.csv', buildCreditorsCsv(CREDITORS))}
+          title="Download the current creditors list as a CSV"
+          style={{ padding: '6px 12px', borderRadius: 4, border: `1px solid ${C.frank}30`, background: C.frankDim, color: C.frank, fontSize: 11, cursor: 'pointer', fontWeight: 700, flexShrink: 0 }}>
+          Export CSV
+        </button>
       </div>
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: '#0a1828' }}>

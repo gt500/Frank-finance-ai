@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { C, fmt } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 import { SpreadsheetImporter } from '../SpreadsheetImporter'
+import { buildDebtorsCsv, downloadCsv } from '../../lib/exportCsv'
 
 const riskColor = (days) =>
   days > 90 ? C.danger : days > 30 ? C.warn : C.frank
@@ -102,6 +103,15 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
           </button>
         </div>
       )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => downloadCsv('debtors.csv', buildDebtorsCsv(rows))}
+          title="Download the current debtors list as a CSV"
+          style={{ padding: '6px 12px', borderRadius: 4, border: `1px solid ${C.frank}30`, background: C.frankDim, color: C.frank, fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
+          Export CSV
+        </button>
+      </div>
 
       {/* Header strip */}
       <div style={{ display: 'flex', gap: 14 }}>
