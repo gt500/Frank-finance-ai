@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { buildTransactionsCsv, buildDebtorsCsv, buildCreditorsCsv } from './exportCsv.js'
+import { buildTransactionsCsv, buildDebtorsCsv, buildCreditorsCsv, buildStatementCsv } from './exportCsv.js'
 
 describe('buildTransactionsCsv', () => {
   test('combines credits and debits, sorted by date, debits as negative amounts, mapped to a GL account', () => {
@@ -50,5 +50,17 @@ describe('buildCreditorsCsv', () => {
   test('maps creditor fields with fallback names', () => {
     const csv = buildCreditorsCsv([{ name: 'Supplier Co', ref: 'BILL-1', amount: 200, due: '2026-02-10', overdue: true }])
     expect(csv.split('\r\n')[1]).toBe('Supplier Co,BILL-1,200,2026-02-10,Yes')
+  })
+})
+
+describe('buildStatementCsv', () => {
+  test('maps statement rows including VAT breakdown and running balance', () => {
+    const rows = [{
+      invoiceNumber: 'ZEE-WONDER-0001', issueDate: '2026-07-01', dueDate: '2026-07-08',
+      lineItems: [{ description: 'Starter Plan — Monthly Subscription (Jul 2026)' }],
+      subtotal: 499, vat: 74.85, total: 573.85, payment: 573.85, balance: 0, status: 'paid',
+    }]
+    const csv = buildStatementCsv(rows)
+    expect(csv.split('\r\n')[1]).toBe('ZEE-WONDER-0001,2026-07-01,2026-07-08,Starter Plan — Monthly Subscription (Jul 2026),499,74.85,573.85,573.85,0,Paid')
   })
 })

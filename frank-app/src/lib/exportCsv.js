@@ -65,3 +65,20 @@ export function buildCreditorsCsv(creditors) {
   ])
   return toCsv(headers, rows)
 }
+
+export function buildStatementCsv(rows) {
+  const headers = ['Invoice Number', 'Issue Date', 'Due Date', 'Description', 'Excl. VAT', 'VAT', 'Total', 'Payment', 'Balance', 'Status']
+  const csvRows = rows.map(r => [
+    r.invoiceNumber,
+    r.issueDate,
+    r.dueDate,
+    r.lineItems.map(li => li.description).join('; '),
+    r.subtotal,
+    r.vat,
+    r.total,
+    r.payment,
+    r.balance,
+    r.status === 'paid' ? 'Paid' : 'Due',
+  ])
+  return toCsv(headers, csvRows)
+}

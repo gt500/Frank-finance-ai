@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { id: 'ar',         label: 'Debtors',          icon: '⊟' },
   { id: 'ap',         label: 'Creditors',        icon: '⊞' },
   { id: 'reconcile',  label: 'Reconciliation',   icon: '⇌', badgeKey: 'unmatched',   badgeColor: C.warn },
+  { id: 'billing',    label: 'Billing',          icon: '🧾' },
   { id: 'connect',    label: 'Connections',      icon: '⊕' },
   { id: 'chat',       label: 'Ask Zeeder',       icon: '◉' },
 ]

@@ -9,6 +9,7 @@ import { Debtors } from './components/views/Debtors'
 import { Creditors } from './components/views/Creditors'
 import { Connections } from './components/views/Connections'
 import { Reconciliation } from './components/views/Reconciliation'
+import { Billing } from './components/views/Billing'
 import { Chat } from './components/views/Chat'
 import { useFrank } from './hooks/useFrank'
 import { useWonderlandData } from './hooks/useWonderlandData'
@@ -28,6 +29,7 @@ const VIEW_LABELS = {
   ar:         'Debtors',
   ap:         'Creditors',
   reconcile:  'Reconciliation',
+  billing:    'Billing',
   connect:    'Connections',
   chat:       'Ask Zeeder',
 }
@@ -126,6 +128,7 @@ function AppContent() {
           {view === 'ar'         && <Debtors       {...viewProps} onNav={setView} />}
           {view === 'ap'         && <Creditors     {...viewProps} onNav={setView} />}
           {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
+          {view === 'billing'    && <Billing        {...viewProps} />}
           {view === 'connect'    && <Connections   {...viewProps} />}
           {view === 'chat'       && <Chat          frank={frank} />}
         </div>
