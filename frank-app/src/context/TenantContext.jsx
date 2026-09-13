@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useMemo, useEffect } from 'react'
 import { TENANTS, getTenantById } from '../data/tenants'
 import { C } from '../lib/theme'
+import { buildMonthlyEntryFromBankData, mergeMonthly, monthKey } from '../lib/monthlyHistory'
 
 const TenantContext = createContext(null)
 
@@ -111,7 +112,7 @@ function buildNewTenant(form) {
   const planPrice = form.plan === 'growth' ? 999 : 499
   const planName  = form.plan === 'growth' ? 'Growth' : 'Starter'
   const now = new Date()
-  const monthLabel = now.toLocaleString('en-ZA', { month: 'short', year: '2-digit' })
+  const monthLabel = now.toLocaleString('en-ZA', { month: 'short' })
   return {
     id,
     name: form.businessName,
@@ -124,7 +125,7 @@ function buildNewTenant(form) {
     planPrice,
     trialStart: new Date().toISOString(),
     data: {
-      MONTHLY: [{ month: monthLabel, rev: 0, cost: 0, profit: 0, cash: 0 }],
+      MONTHLY: [{ m: monthLabel, y: now.getFullYear(), fees: 0, subsidy: 0, rev: 0, exp: 0, net: 0, cash: 0, take: 'No data yet — upload a bank statement to get started.' }],
       WEEKLY_FORECAST: [],
       EXPENSES: [
         { label: 'Staff', value: 40 }, { label: 'Rent', value: 20 },
@@ -192,18 +193,24 @@ export function TenantProvider({ children }) {
   const [categoryMaps, setCategoryMaps] = useState(() => {
     try { return JSON.parse(localStorage.getItem('zeeder_category_map') || '{}') } catch { return {} }
   })
+  const [monthlyHistory, setMonthlyHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('zeeder_monthly_history') || '{}') } catch { return {} }
+  })
 
   const allTenants = useMemo(() => [...TENANTS, ...customTenants], [customTenants])
   const tenant = useMemo(() => allTenants.find(t => t.id === activeTenantId) || allTenants[0], [allTenants, activeTenantId])
 
   const mergedData = useMemo(() => {
     const imp = importedData[activeTenantId] || {}
+    const reconciled = Object.values(monthlyHistory[activeTenantId] || {})
+
     return {
       ...tenant.data,
+      MONTHLY:   mergeMonthly(tenant.data.MONTHLY, reconciled),
       DEBTORS:   imp.DEBTORS   ?? tenant.data.DEBTORS,
       CREDITORS: imp.CREDITORS ?? tenant.data.CREDITORS,
     }
-  }, [tenant, activeTenantId, importedData])
+  }, [tenant, activeTenantId, importedData, monthlyHistory])
 
   function importDebtors(rows) {
     const updated = { ...importedData, [activeTenantId]: { ...(importedData[activeTenantId] || {}), DEBTORS: rows } }
@@ -381,6 +388,14 @@ export function TenantProvider({ children }) {
     }))
 
     setBankData(prev => ({ ...prev, isConfirmed: true, confirmedDebtors, confirmedCreditors }))
+
+    const entry = buildMonthlyEntryFromBankData(bankData)
+    const updated = {
+      ...monthlyHistory,
+      [activeTenantId]: { ...(monthlyHistory[activeTenantId] || {}), [monthKey(entry.y, entry.m)]: entry },
+    }
+    setMonthlyHistory(updated)
+    localStorage.setItem('zeeder_monthly_history', JSON.stringify(updated))
   }
 
   function clearBankData() {
@@ -410,6 +425,12 @@ export function TenantProvider({ children }) {
       delete catMap[tenantId]
       setCategoryMaps(catMap)
       localStorage.setItem('zeeder_category_map', JSON.stringify(catMap))
+    } catch {}
+    try {
+      const hist = JSON.parse(localStorage.getItem('zeeder_monthly_history') || '{}')
+      delete hist[tenantId]
+      setMonthlyHistory(hist)
+      localStorage.setItem('zeeder_monthly_history', JSON.stringify(hist))
     } catch {}
     setCurrentUser(null)
     localStorage.removeItem('zeeder_user')

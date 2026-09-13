@@ -18,18 +18,18 @@ export const BUSINESS = {
 }
 
 export const MONTHLY = [
-  { m:'Jul', fees:128400, subsidy:28500, rev:156900, exp:138200, net:18700,  cash:48200,  take:'School started well — R 18,700 profit in July. Fee income was steady and expenses were controlled. A good benchmark month.' },
-  { m:'Aug', fees:131200, subsidy:28500, rev:159700, exp:141500, net:18200,  cash:62400,  take:'Another solid month. R 18,200 profit. Revenue growing, costs manageable.' },
-  { m:'Sep', fees:129800, subsidy:28500, rev:158300, exp:155200, net:3100,   cash:58900,  take:'Profit dropped sharply to R 3,100 — expenses jumped by R 13,700. Worth checking what caused the spike.' },
-  { m:'Oct', fees:134600, subsidy:31200, rev:165800, exp:148900, net:16900,  cash:71200,  take:'Recovered well — R 16,900 profit. The WCED subsidy increase helped significantly.' },
-  { m:'Nov', fees:136200, subsidy:31200, rev:167400, exp:162300, net:5100,   cash:68100,  take:'Thin month: R 5,100 profit. Expenses crept up again. Watch the trend.' },
-  { m:'Dec', fees:72400,  subsidy:15600, rev:88000,  exp:98400,  net:-10400, cash:42300,  take:'December loss of R 10,400 — this happens every year. Fees halve during the holidays but staff still get paid. You need a reserve fund for next December.' },
-  { m:'Jan', fees:138800, subsidy:31200, rev:170000, exp:151200, net:18800,  cash:55800,  take:'Strong start to the year — R 18,800 profit, the best month in this period. Good fee collection after the January invoicing.' },
-  { m:'Feb', fees:140200, subsidy:31200, rev:171400, exp:158700, net:12700,  cash:64200,  take:'Decent month — R 12,700 profit. Revenue grew but so did expenses.' },
-  { m:'Mar', fees:141500, subsidy:33800, rev:175300, exp:161200, net:14100,  cash:72400,  take:'R 14,100 profit. The subsidy increase in March helped offset rising costs.' },
-  { m:'Apr', fees:139800, subsidy:33800, rev:173600, exp:168900, net:4700,   cash:69800,  take:'Profit slipped to R 4,700 as expenses grew faster than income — a pattern that is now repeating every month.' },
-  { m:'May', fees:142300, subsidy:33800, rev:176100, exp:172400, net:3700,   cash:65100,  take:'Only R 3,700 profit. The margin squeeze is getting worse — down 80% since January.' },
-  { m:'Jun', fees:144000, subsidy:33800, rev:177800, exp:174200, net:3600,   cash:61400,  take:'R 3,600 profit — the lowest non-December month. Expenses are now R 174,200 vs revenue of R 177,800. You are almost breaking even. This cannot continue without a fee increase or cost cut.' },
+  { m:'Jul', y:2025, fees:128400, subsidy:28500, rev:156900, exp:138200, net:18700,  cash:48200,  take:'School started well — R 18,700 profit in July. Fee income was steady and expenses were controlled. A good benchmark month.' },
+  { m:'Aug', y:2025, fees:131200, subsidy:28500, rev:159700, exp:141500, net:18200,  cash:62400,  take:'Another solid month. R 18,200 profit. Revenue growing, costs manageable.' },
+  { m:'Sep', y:2025, fees:129800, subsidy:28500, rev:158300, exp:155200, net:3100,   cash:58900,  take:'Profit dropped sharply to R 3,100 — expenses jumped by R 13,700. Worth checking what caused the spike.' },
+  { m:'Oct', y:2025, fees:134600, subsidy:31200, rev:165800, exp:148900, net:16900,  cash:71200,  take:'Recovered well — R 16,900 profit. The WCED subsidy increase helped significantly.' },
+  { m:'Nov', y:2025, fees:136200, subsidy:31200, rev:167400, exp:162300, net:5100,   cash:68100,  take:'Thin month: R 5,100 profit. Expenses crept up again. Watch the trend.' },
+  { m:'Dec', y:2025, fees:72400,  subsidy:15600, rev:88000,  exp:98400,  net:-10400, cash:42300,  take:'December loss of R 10,400 — this happens every year. Fees halve during the holidays but staff still get paid. You need a reserve fund for next December.' },
+  { m:'Jan', y:2026, fees:138800, subsidy:31200, rev:170000, exp:151200, net:18800,  cash:55800,  take:'Strong start to the year — R 18,800 profit, the best month in this period. Good fee collection after the January invoicing.' },
+  { m:'Feb', y:2026, fees:140200, subsidy:31200, rev:171400, exp:158700, net:12700,  cash:64200,  take:'Decent month — R 12,700 profit. Revenue grew but so did expenses.' },
+  { m:'Mar', y:2026, fees:141500, subsidy:33800, rev:175300, exp:161200, net:14100,  cash:72400,  take:'R 14,100 profit. The subsidy increase in March helped offset rising costs.' },
+  { m:'Apr', y:2026, fees:139800, subsidy:33800, rev:173600, exp:168900, net:4700,   cash:69800,  take:'Profit slipped to R 4,700 as expenses grew faster than income — a pattern that is now repeating every month.' },
+  { m:'May', y:2026, fees:142300, subsidy:33800, rev:176100, exp:172400, net:3700,   cash:65100,  take:'Only R 3,700 profit. The margin squeeze is getting worse — down 80% since January.' },
+  { m:'Jun', y:2026, fees:144000, subsidy:33800, rev:177800, exp:174200, net:3600,   cash:61400,  take:'R 3,600 profit — the lowest non-December month. Expenses are now R 174,200 vs revenue of R 177,800. You are almost breaking even. This cannot continue without a fee increase or cost cut.' },
 ]
 
 export const WEEKLY_FORECAST = [
