@@ -62,7 +62,7 @@ export function Reports({ onAsk }) {
               padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--mono)',
             }}>
             {MONTHLY.map((mo, i) => (
-              <option key={`${mo.m}-${mo.y ?? i}`} value={i}>{mo.m} {mo.y ?? ''}</option>
+              <option key={mo.m} value={i}>{mo.m} {i <= 5 ? '2025' : '2026'}</option>
             ))}
           </select>
           {m.net < 0 && (

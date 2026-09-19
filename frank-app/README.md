@@ -18,15 +18,21 @@ cd frank-finance-ai
 npm install
 ```
 
-### 2. Add your API key
+### 2. Configure Supabase and set secrets
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and add your Anthropic API key:
-```
-VITE_ANTHROPIC_API_KEY=sk-ant-...
+Open `.env` and set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (the anon
+key is safe to expose — it's protected by RLS, not the secret itself).
+
+The Anthropic key is **not** an env var anymore — Claude is called through
+`chat-message` and `extract-document` Supabase edge functions so the key
+never reaches the browser. Set it once with:
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+supabase functions deploy chat-message extract-document
 ```
 
 Get your key at: https://console.anthropic.com

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
-const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024 // 20 MB
 
@@ -20,6 +21,12 @@ function fetchWithTimeout(url, options, ms = 30000) {
   return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer))
 }
 
+async function authHeader() {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not signed in — please log in again.')
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
+}
+
 export function useFrank(initialMessages = []) {
   const [messages, setMessages] = useState(initialMessages)
   const [loading, setLoading]   = useState(false)
@@ -34,30 +41,19 @@ export function useFrank(initialMessages = []) {
     setLoading(true)
 
     try {
-      const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+      const headers = await authHeader()
+      const response = await fetchWithTimeout(`${SUPABASE_URL}/functions/v1/chat-message`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers,
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1000,
           system: customSystem,
-          messages: [...messages, userMsg].map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
         }),
       })
 
-      if (!response.ok) {
-        throw new Error(`API error ${response.status}`)
-      }
-
       const data = await response.json()
+      if (!response.ok) throw new Error(data.error || `API error ${response.status}`)
+
       const reply = data.content?.[0]?.text || 'No response.'
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
       return reply
@@ -65,7 +61,7 @@ export function useFrank(initialMessages = []) {
       setError(err.message)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Connection error. Check your API key in .env and try again.',
+        content: 'Connection error. Please try again.',
       }])
     } finally {
       setLoading(false)
@@ -82,10 +78,6 @@ export function useFrank(initialMessages = []) {
 
 // ─── PDF / Document extraction ────────────────────────────────────────────────
 export async function extractFromDocument(file, documentType) {
-  if (!API_KEY || API_KEY.startsWith('your-')) {
-    throw new Error('Anthropic API key not set — add VITE_ANTHROPIC_API_KEY to .env and restart the dev server')
-  }
-
   if (file.size > MAX_FILE_BYTES) {
     throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB) — maximum is 20 MB. Try exporting a shorter date range.`)
   }
@@ -130,7 +122,6 @@ Amounts as numbers. PAYE = Pay As You Earn (income tax). UIF = Unemployment Insu
       { type: 'text', text: prompts[documentType] },
     ]
   } else if (['xlsx', 'xls', 'ods'].includes(ext)) {
-    // Excel — lazy-load SheetJS to keep initial bundle small; parse to CSV text
     const XLSX = await import('xlsx')
     const arrayBuffer = await file.arrayBuffer()
     const wb = XLSX.read(arrayBuffer, { type: 'array' })
@@ -138,7 +129,6 @@ Amounts as numbers. PAYE = Pay As You Earn (income tax). UIF = Unemployment Insu
     const csv = XLSX.utils.sheet_to_csv(ws)
     messageContent = `${prompts[documentType]}\n\nFile content (converted from Excel):\n${csv.slice(0, 8000)}`
   } else {
-    // PDF, Word — send as PDF document (Claude handles PDFs natively)
     const base64 = await toBase64(file)
     messageContent = [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
@@ -146,42 +136,21 @@ Amounts as numbers. PAYE = Pay As You Earn (income tax). UIF = Unemployment Insu
     ]
   }
 
-  const callApi = () => fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+  const headers = await authHeader()
+  const response = await fetchWithTimeout(`${SUPABASE_URL}/functions/v1/extract-document`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8192,
-      messages: [{ role: 'user', content: messageContent }],
-    }),
-  })
-
-  let response = await callApi()
-
-  // Auto-retry once after 65 seconds on rate limit
-  if (response.status === 429) {
-    await new Promise(resolve => setTimeout(resolve, 65000))
-    response = await callApi()
-  }
+    headers,
+    body: JSON.stringify({ messageContent }),
+  }, 90000) // extraction can legitimately take longer than a chat turn
 
   const data = await response.json()
   if (!response.ok) {
-    if (response.status === 429) {
-      throw new Error('Rate limit — too many requests in a short time (usually from a large PDF attempt just before). Wait 2 minutes and try again. Your CSV file is fine.')
-    }
-    throw new Error(data.error?.message || `API error ${response.status}`)
+    throw new Error(data.error || `API error ${response.status}`)
   }
-  const raw = data.content?.[0]?.text || '{}'
-  // Check if the model hit the token limit mid-response
   if (data.stop_reason === 'max_tokens') {
     throw new Error('The document is too large to process in one pass. Try splitting it into smaller date ranges, or export only the last 2–3 months.')
   }
-  // Strip code fences, then extract the outermost JSON object
+  const raw = data.content?.[0]?.text || '{}'
   const stripped = raw.replace(/```(?:json)?/gi, '').trim()
   const jsonStart = stripped.indexOf('{')
   const jsonEnd   = stripped.lastIndexOf('}')

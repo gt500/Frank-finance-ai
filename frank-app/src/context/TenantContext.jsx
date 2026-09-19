@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useMemo, useEffect } from 'react'
 import { TENANTS, getTenantById } from '../data/tenants'
 import { C } from '../lib/theme'
-import { buildMonthlyEntryFromBankData, mergeMonthly, monthKey } from '../lib/monthlyHistory'
+import { supabase } from '../lib/supabaseClient'
 
 const TenantContext = createContext(null)
 
@@ -28,91 +28,18 @@ function findMatch(description, knownNames) {
   }) || null
 }
 
-// Shared by loadBankStatement (existing tenant) and registerAccount (brand
-// new tenant, onboarding) — takes the raw AI extraction and the target
-// tenant's own debtor/creditor names, so it never matches against another
-// tenant's data.
-function buildBankData(extractedData, debtorNames, creditorNames) {
-  const {
-    transactions = [],
-    bank_name = 'Bank',
-    period_start = '',
-    period_end = '',
-    opening_balance = 0,
-    closing_balance = 0,
-  } = extractedData
-
-  const credits = transactions
-    .filter(t => (t.credit || 0) > 0)
-    .map((t, i) => {
-      const matched = findMatch(t.description, debtorNames)
-      return {
-        id: `cr-${i}`,
-        date: t.date,
-        description: t.description,
-        amount: t.credit,
-        entityName: matched || extractEntityName(t.description),
-        matchedName: matched,
-        category: t.category || 'Unknown',
-        confirmed: false,
-      }
-    })
-
-  const debits = transactions
-    .filter(t => (t.debit || 0) > 0)
-    .map((t, i) => {
-      const matched = findMatch(t.description, creditorNames)
-      return {
-        id: `db-${i}`,
-        date: t.date,
-        description: t.description,
-        amount: t.debit,
-        entityName: matched || extractEntityName(t.description),
-        matchedName: matched,
-        category: t.category || 'Unknown',
-        confirmed: false,
-      }
-    })
-
-  return {
-    bankName: bank_name,
-    periodStart: period_start,
-    periodEnd: period_end,
-    openingBalance: opening_balance,
-    closingBalance: closing_balance,
-    credits,
-    debits,
-    isConfirmed: false,
-    confirmedDebtors: null,
-    confirmedCreditors: null,
-  }
-}
-
-const DEMO_ACCOUNTS = [
-  { email: 'admin@capefresh.co.za', password: import.meta.env.VITE_DEMO_PASSWORD, name: 'Cape Fresh Admin', tenantId: 'cape-fresh-grocery' },
-]
-
-// Private accounts are validated at login time only — NEVER written to localStorage
-const PRIVATE_ACCOUNTS = [
-  { email: 'bev@wonderlandeducare.com', password: import.meta.env.VITE_WONDERLAND_PASSWORD, name: 'Bev Manson', tenantId: 'wonderland-educare' },
-]
-
-function seedAccounts() {
-  const stored = localStorage.getItem('zeeder_accounts')
-  const existing = stored ? JSON.parse(stored) : DEMO_ACCOUNTS
-  // Strip any private accounts that leaked from a prior version — they must never live in localStorage
-  const privateEmails = new Set(PRIVATE_ACCOUNTS.map(p => p.email))
-  const cleaned = existing.filter(a => !privateEmails.has(a.email))
-  localStorage.setItem('zeeder_accounts', JSON.stringify(cleaned))
-  return cleaned
-}
+// Accounts now live in Supabase Auth — see supabase/migrations/20260920a_profiles_and_rls.sql.
+// The two accounts that used to be hardcoded here (admin@capefresh.co.za,
+// bev@wonderlandeducare.com) need to be created once via supabase.auth.signUp
+// or the Supabase dashboard, with a matching row in `profiles` setting their
+// tenant_id to 'cape-fresh-grocery' / 'wonderland-educare'.
 
 function buildNewTenant(form) {
   const id = `tenant-${Date.now()}`
   const planPrice = form.plan === 'growth' ? 999 : 499
   const planName  = form.plan === 'growth' ? 'Growth' : 'Starter'
   const now = new Date()
-  const monthLabel = now.toLocaleString('en-ZA', { month: 'short' })
+  const monthLabel = now.toLocaleString('en-ZA', { month: 'short', year: '2-digit' })
   return {
     id,
     name: form.businessName,
@@ -125,7 +52,7 @@ function buildNewTenant(form) {
     planPrice,
     trialStart: new Date().toISOString(),
     data: {
-      MONTHLY: [{ m: monthLabel, y: now.getFullYear(), fees: 0, subsidy: 0, rev: 0, exp: 0, net: 0, cash: 0, take: 'No data yet — upload a bank statement to get started.' }],
+      MONTHLY: [{ month: monthLabel, rev: 0, cost: 0, profit: 0, cash: 0 }],
       WEEKLY_FORECAST: [],
       EXPENSES: [
         { label: 'Staff', value: 40 }, { label: 'Rent', value: 20 },
@@ -151,10 +78,8 @@ function buildNewTenant(form) {
 }
 
 export function TenantProvider({ children }) {
-  const [accounts, setAccounts] = useState(seedAccounts)
-  const [currentUser, setCurrentUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zeeder_user') || 'null') } catch { return null }
-  })
+  const [currentUser, setCurrentUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [customTenants, setCustomTenants] = useState(() => {
     try { return JSON.parse(localStorage.getItem('zeeder_custom_tenants') || '[]') } catch { return [] }
   })
@@ -190,27 +115,47 @@ export function TenantProvider({ children }) {
   const [importedData, setImportedData] = useState(() => {
     try { return JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}') } catch { return {} }
   })
-  const [categoryMaps, setCategoryMaps] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zeeder_category_map') || '{}') } catch { return {} }
-  })
-  const [monthlyHistory, setMonthlyHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zeeder_monthly_history') || '{}') } catch { return {} }
-  })
+
+  // Load the profile row (email, name, tenant_id) for a Supabase Auth session
+  async function loadProfileForSession(session) {
+    if (!session?.user) { setCurrentUser(null); return }
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('email, name, tenant_id')
+      .eq('id', session.user.id)
+      .single()
+    if (error || !profile) {
+      console.error('No profile row for this user — sign-up may not have completed', error)
+      setCurrentUser(null)
+      return
+    }
+    setCurrentUser({ email: profile.email, name: profile.name, tenantId: profile.tenant_id })
+    setActiveTenantId(profile.tenant_id)
+    localStorage.setItem('zeeder_tenant', profile.tenant_id)
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      loadProfileForSession(session).finally(() => setAuthLoading(false))
+    })
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadProfileForSession(session)
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
 
   const allTenants = useMemo(() => [...TENANTS, ...customTenants], [customTenants])
   const tenant = useMemo(() => allTenants.find(t => t.id === activeTenantId) || allTenants[0], [allTenants, activeTenantId])
 
   const mergedData = useMemo(() => {
     const imp = importedData[activeTenantId] || {}
-    const reconciled = Object.values(monthlyHistory[activeTenantId] || {})
-
     return {
       ...tenant.data,
-      MONTHLY:   mergeMonthly(tenant.data.MONTHLY, reconciled),
       DEBTORS:   imp.DEBTORS   ?? tenant.data.DEBTORS,
       CREDITORS: imp.CREDITORS ?? tenant.data.CREDITORS,
     }
-  }, [tenant, activeTenantId, importedData, monthlyHistory])
+  }, [tenant, activeTenantId, importedData])
 
   function importDebtors(rows) {
     const updated = { ...importedData, [activeTenantId]: { ...(importedData[activeTenantId] || {}), DEBTORS: rows } }
@@ -240,23 +185,14 @@ export function TenantProvider({ children }) {
     localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
   }
 
-  function setCategoryMapping(rawCategory, accountCode) {
-    const updated = { ...categoryMaps, [activeTenantId]: { ...(categoryMaps[activeTenantId] || {}), [rawCategory]: accountCode } }
-    setCategoryMaps(updated)
-    localStorage.setItem('zeeder_category_map', JSON.stringify(updated))
-  }
-
-  function login(email, password) {
+  async function login(email, password) {
     const now = Date.now()
     if (loginAttempts.lockedUntil > now) {
       const secs = Math.ceil((loginAttempts.lockedUntil - now) / 1000)
       return { ok: false, error: `Too many failed attempts — wait ${secs}s before trying again` }
     }
-    // Check private accounts against env vars first — never read from localStorage
-    const matched =
-      PRIVATE_ACCOUNTS.find(a => a.email === email && a.password === password) ||
-      accounts.find(a => a.email === email && a.password === password)
-    if (!matched) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) {
       const newCount = loginAttempts.count + 1
       setLoginAttempts(newCount >= 5
         ? { count: 0, lockedUntil: now + 30000 }
@@ -264,56 +200,47 @@ export function TenantProvider({ children }) {
       return { ok: false, error: 'Invalid email or password' }
     }
     setLoginAttempts({ count: 0, lockedUntil: 0 })
-    const user = { email: matched.email, name: matched.name, tenantId: matched.tenantId }
-    setCurrentUser(user)
-    localStorage.setItem('zeeder_user', JSON.stringify(user))
-    setActiveTenantId(matched.tenantId)
-    localStorage.setItem('zeeder_tenant', matched.tenantId)
+    // currentUser/activeTenantId are set by the onAuthStateChange listener above
     return { ok: true }
   }
 
-  function logout() {
+  async function logout() {
+    await supabase.auth.signOut()
     setCurrentUser(null)
-    localStorage.removeItem('zeeder_user')
     setBankData(null)
     setAdminUnlocked(false)
-    // Purge any private-account entries that may have leaked into localStorage from a prior version
-    const privateEmails = new Set(PRIVATE_ACCOUNTS.map(p => p.email))
-    const cleaned = accounts.filter(a => !privateEmails.has(a.email))
-    if (cleaned.length !== accounts.length) {
-      setAccounts(cleaned)
-      localStorage.setItem('zeeder_accounts', JSON.stringify(cleaned))
-    }
   }
 
-  function registerAccount(form, bankExtract) {
+  async function registerAccount(form) {
     const email = form.email.trim().toLowerCase()
-    if (accounts.find(a => a.email === email)) {
-      return { ok: false, error: 'An account with this email already exists' }
-    }
-    const newTenant  = buildNewTenant(form)
-    const newAccount = { email, password: form.password, name: form.name, tenantId: newTenant.id }
+    const newTenant = buildNewTenant(form)
 
-    const updatedCustom   = [...customTenants, newTenant]
-    const updatedAccounts = [...accounts, newAccount]
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password: form.password,
+    })
+    if (signUpError) {
+      return { ok: false, error: signUpError.message }
+    }
+    if (!signUpData.user) {
+      return { ok: false, error: 'Check your email to confirm your account, then log in.' }
+    }
+
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: signUpData.user.id,
+      email,
+      name: form.name,
+      tenant_id: newTenant.id,
+    })
+    if (profileError) {
+      return { ok: false, error: `Account created but profile setup failed: ${profileError.message}` }
+    }
+
+    const updatedCustom = [...customTenants, newTenant]
     setCustomTenants(updatedCustom)
-    setAccounts(updatedAccounts)
     localStorage.setItem('zeeder_custom_tenants', JSON.stringify(updatedCustom))
-    localStorage.setItem('zeeder_accounts', JSON.stringify(updatedAccounts))
 
-    const user = { email, name: form.name, tenantId: newTenant.id }
-    setCurrentUser(user)
-    localStorage.setItem('zeeder_user', JSON.stringify(user))
-    setActiveTenantId(newTenant.id)
-    localStorage.setItem('zeeder_tenant', newTenant.id)
-
-    // Uses newTenant's own (empty) debtor/creditor lists, never the
-    // previously-active tenant's — this new tenant has no data to leak into.
-    if (bankExtract) {
-      const debtorNames   = newTenant.data.DEBTORS.map(d => d.name)
-      const creditorNames = newTenant.data.CREDITORS.map(c => c.name || c.supplier)
-      setBankData(buildBankData(bankExtract, debtorNames, creditorNames))
-    }
+    // onAuthStateChange fires from signUp and loads the profile into currentUser/activeTenantId
     return { ok: true }
   }
 
@@ -332,9 +259,62 @@ export function TenantProvider({ children }) {
   function lockAdmin() { setAdminUnlocked(false) }
 
   function loadBankStatement(extractedData) {
+    const {
+      transactions = [],
+      bank_name = 'Bank',
+      period_start = '',
+      period_end = '',
+      opening_balance = 0,
+      closing_balance = 0,
+    } = extractedData
+
     const debtorNames   = (tenant.data.DEBTORS  || []).map(d => d.name)
     const creditorNames = (tenant.data.CREDITORS || []).map(c => c.name || c.supplier)
-    setBankData(buildBankData(extractedData, debtorNames, creditorNames))
+
+    const credits = transactions
+      .filter(t => (t.credit || 0) > 0)
+      .map((t, i) => {
+        const matched = findMatch(t.description, debtorNames)
+        return {
+          id: `cr-${i}`,
+          date: t.date,
+          description: t.description,
+          amount: t.credit,
+          entityName: matched || extractEntityName(t.description),
+          matchedName: matched,
+          category: t.category || 'Unknown',
+          confirmed: false,
+        }
+      })
+
+    const debits = transactions
+      .filter(t => (t.debit || 0) > 0)
+      .map((t, i) => {
+        const matched = findMatch(t.description, creditorNames)
+        return {
+          id: `db-${i}`,
+          date: t.date,
+          description: t.description,
+          amount: t.debit,
+          entityName: matched || extractEntityName(t.description),
+          matchedName: matched,
+          category: t.category || 'Unknown',
+          confirmed: false,
+        }
+      })
+
+    setBankData({
+      bankName: bank_name,
+      periodStart: period_start,
+      periodEnd: period_end,
+      openingBalance: opening_balance,
+      closingBalance: closing_balance,
+      credits,
+      debits,
+      isConfirmed: false,
+      confirmedDebtors: null,
+      confirmedCreditors: null,
+    })
   }
 
   function updateEntityName(type, id, newName) {
@@ -388,14 +368,6 @@ export function TenantProvider({ children }) {
     }))
 
     setBankData(prev => ({ ...prev, isConfirmed: true, confirmedDebtors, confirmedCreditors }))
-
-    const entry = buildMonthlyEntryFromBankData(bankData)
-    const updated = {
-      ...monthlyHistory,
-      [activeTenantId]: { ...(monthlyHistory[activeTenantId] || {}), [monthKey(entry.y, entry.m)]: entry },
-    }
-    setMonthlyHistory(updated)
-    localStorage.setItem('zeeder_monthly_history', JSON.stringify(updated))
   }
 
   function clearBankData() {
@@ -403,37 +375,27 @@ export function TenantProvider({ children }) {
     localStorage.removeItem(`zeeder_bank_${activeTenantId}`)
   }
 
-  function deleteAccount() {
+  async function deleteAccount() {
     if (!currentUser) return
-    const { tenantId, email } = currentUser
-    // Prevent deletion of hardcoded private/demo tenants — only custom tenants can self-delete
-    if (PRIVATE_ACCOUNTS.some(p => p.email === email)) return
-    const updatedCustom    = customTenants.filter(t => t.id !== tenantId)
-    const updatedAccounts  = accounts.filter(a => a.email !== email)
+    const { tenantId } = currentUser
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) {
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+    }
+    const updatedCustom = customTenants.filter(t => t.id !== tenantId)
     setCustomTenants(updatedCustom)
-    setAccounts(updatedAccounts)
     localStorage.setItem('zeeder_custom_tenants', JSON.stringify(updatedCustom))
-    localStorage.setItem('zeeder_accounts', JSON.stringify(updatedAccounts))
     localStorage.removeItem(`zeeder_bank_${tenantId}`)
     try {
       const imp = JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}')
       delete imp[tenantId]
       localStorage.setItem('zeeder_imported_data', JSON.stringify(imp))
     } catch {}
-    try {
-      const catMap = JSON.parse(localStorage.getItem('zeeder_category_map') || '{}')
-      delete catMap[tenantId]
-      setCategoryMaps(catMap)
-      localStorage.setItem('zeeder_category_map', JSON.stringify(catMap))
-    } catch {}
-    try {
-      const hist = JSON.parse(localStorage.getItem('zeeder_monthly_history') || '{}')
-      delete hist[tenantId]
-      setMonthlyHistory(hist)
-      localStorage.setItem('zeeder_monthly_history', JSON.stringify(hist))
-    } catch {}
+    await supabase.auth.signOut()
     setCurrentUser(null)
-    localStorage.removeItem('zeeder_user')
     localStorage.removeItem('zeeder_tenant')
     setBankData(null)
     setAdminUnlocked(false)
@@ -447,6 +409,7 @@ export function TenantProvider({ children }) {
       tenants:        allTenants,
       activeTenantId,
       currentUser,
+      authLoading,
       login,
       logout,
       registerAccount,
@@ -466,8 +429,6 @@ export function TenantProvider({ children }) {
       clearImportedDebtors,
       clearImportedCreditors,
       importedData,
-      categoryMap: categoryMaps[activeTenantId] || {},
-      setCategoryMapping,
     }}>
       {children}
     </TenantContext.Provider>

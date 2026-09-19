@@ -16,11 +16,11 @@ export function Login({ onLogin, onStartOnboarding }) {
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const result = onLogin(email.trim().toLowerCase(), password)
+    const result = await onLogin(email.trim().toLowerCase(), password)
     if (!result.ok) setError(result.error)
     setLoading(false)
   }

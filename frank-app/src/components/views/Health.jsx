@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { C } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 
@@ -95,13 +94,11 @@ function HealthCard({ check, onAsk }) {
 export function Health({ onAsk }) {
   const { data } = useTenant()
   const { HEALTH_CHECKS } = data
-  const [statusFilter, setStatusFilter] = useState(null)
   const overallScore = Math.round(HEALTH_CHECKS.reduce((a, h) => a + h.score, 0) / HEALTH_CHECKS.length)
   const scoreColor   = overallScore > 75 ? C.frank : overallScore > 50 ? C.warn : C.danger
 
   const issues = HEALTH_CHECKS.filter(h => h.status !== 'good').length
   const highPriority = HEALTH_CHECKS.filter(h => h.priority === 'HIGH')
-  const visibleChecks = statusFilter ? HEALTH_CHECKS.filter(h => h.status === statusFilter) : HEALTH_CHECKS
 
   return (
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -135,26 +132,15 @@ export function Health({ onAsk }) {
               {/* Score breakdown */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                 {[
-                  { status: 'good', label: 'Areas doing well', count: HEALTH_CHECKS.filter(h => h.status === 'good').length, color: C.frank },
-                  { status: 'warn', label: 'Need attention',   count: HEALTH_CHECKS.filter(h => h.status === 'warn').length, color: C.warn },
-                  { status: 'bad',  label: 'Act now',          count: HEALTH_CHECKS.filter(h => h.status === 'bad').length,  color: C.danger },
-                ].map(row => {
-                  const active = statusFilter === row.status
-                  return (
-                    <button
-                      key={row.label}
-                      onClick={() => setStatusFilter(active ? null : row.status)}
-                      title={active ? 'Click to clear filter' : `Show only "${row.label}" in the breakdown below`}
-                      style={{
-                        padding: '10px 14px', background: `${row.color}${active ? '20' : '10'}`, borderRadius: 6,
-                        border: `1px solid ${row.color}${active ? '70' : '25'}`, textAlign: 'center', cursor: 'pointer',
-                        font: 'inherit', transition: 'all .15s',
-                      }}>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: row.color, fontFamily: 'var(--mono)' }}>{row.count}</div>
-                      <div style={{ fontSize: 11, color: C.sub, marginTop: 3 }}>{row.label}</div>
-                    </button>
-                  )
-                })}
+                  { label: 'Areas doing well',   count: HEALTH_CHECKS.filter(h => h.status === 'good').length, color: C.frank },
+                  { label: 'Need attention',      count: HEALTH_CHECKS.filter(h => h.status === 'warn').length, color: C.warn },
+                  { label: 'Act now',             count: HEALTH_CHECKS.filter(h => h.status === 'bad').length,  color: C.danger },
+                ].map(row => (
+                  <div key={row.label} style={{ padding: '10px 14px', background: `${row.color}10`, borderRadius: 6, border: `1px solid ${row.color}25`, textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: row.color, fontFamily: 'var(--mono)' }}>{row.count}</div>
+                    <div style={{ fontSize: 11, color: C.sub, marginTop: 3 }}>{row.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -186,23 +172,12 @@ export function Health({ onAsk }) {
 
         {/* ── Section 3: All Health Cards ───────────────────── */}
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', background: C.card }}>
-          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Detailed Health Breakdown</div>
-              <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>
-                {statusFilter ? `Showing "${STATUS_LABELS[statusFilter]}" only` : 'Each of the 6 areas explained — what it means and what to do'}
-              </div>
-            </div>
-            {statusFilter && (
-              <button
-                onClick={() => setStatusFilter(null)}
-                style={{ padding: '6px 12px', borderRadius: 4, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer' }}>
-                Clear filter ×
-              </button>
-            )}
+          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Detailed Health Breakdown</div>
+            <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>Each of the 6 areas explained — what it means and what to do</div>
           </div>
           <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-            {visibleChecks.map(check => (
+            {HEALTH_CHECKS.map(check => (
               <HealthCard key={check.id} check={check} onAsk={onAsk} />
             ))}
           </div>

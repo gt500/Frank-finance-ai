@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { id: 'ar',         label: 'Debtors',          icon: '⊟' },
   { id: 'ap',         label: 'Creditors',        icon: '⊞' },
   { id: 'reconcile',  label: 'Reconciliation',   icon: '⇌', badgeKey: 'unmatched',   badgeColor: C.warn },
-  { id: 'billing',    label: 'Billing',          icon: '🧾' },
   { id: 'connect',    label: 'Connections',      icon: '⊕' },
   { id: 'chat',       label: 'Ask Zeeder',       icon: '◉' },
 ]
@@ -42,18 +41,15 @@ export function Sidebar({ view, onNav, onAsk }) {
         flexDirection: 'column',
         flexShrink: 0,
         height: '100vh',
-        overflow: 'hidden',
       }}>
 
-        {/* Logo — source PNG is a 500x500 square with the wordmark sitting in
-            a thin band roughly a third of the way down, so the display area
-            is cropped (top-aligned, overflow hidden) to just that band. */}
-        <div style={{ padding: '6px 16px 4px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ width: '70%', margin: '0 auto', height: 76, overflow: 'hidden' }}>
-            <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '100%', display: 'block' }} />
-          </div>
-          <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center', marginTop: 2 }}>
-            Finance OS
+        {/* Logo */}
+        <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ position: 'relative' }}>
+            <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '100%', display: 'block', marginBottom: -28 }} />
+            <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', paddingBottom: 4 }}>
+              Finance OS
+            </div>
           </div>
         </div>
 
@@ -79,7 +75,7 @@ export function Sidebar({ view, onNav, onAsk }) {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, minHeight: 0, padding: '10px 10px', overflowY: 'auto' }}>
+        <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto' }}>
           {NAV_ITEMS.map(n => {
             const active    = view === n.id
             const badgeVal  = n.badgeKey ? badges[n.badgeKey] : null
@@ -122,7 +118,7 @@ export function Sidebar({ view, onNav, onAsk }) {
         </nav>
 
         {/* Plan footer */}
-        <div style={{ flexShrink: 0, padding: '14px 20px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}` }}>
 
           {/* User info row */}
           {currentUser && (
@@ -181,7 +177,26 @@ export function Sidebar({ view, onNav, onAsk }) {
               </button>
             )}
           </div>
-          <button onClick={() => onAsk('What would I get if I upgraded to the Zeeder Finance OS Growth plan?')}
+          <button onClick={async () => {
+              try {
+                const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-initiate`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tenant_id: tenant.id,
+                    plan: 'growth',
+                    first_name: currentUser?.name?.split(' ')[0] ?? 'Customer',
+                    last_name: currentUser?.name?.split(' ').slice(1).join(' ') ?? '',
+                    email: currentUser?.email,
+                  }),
+                })
+                const data = await res.json()
+                if (data.redirect_url) window.location.href = data.redirect_url
+                else onAsk(`Upgrade failed: ${data.error ?? 'unknown error'}. What should I check?`)
+              } catch (e) {
+                onAsk(`Upgrade failed to start: ${e.message}. What should I check?`)
+              }
+            }}
             style={{
               width: '100%', padding: '8px', borderRadius: 4,
               border: `1px solid ${C.frank}30`, background: C.frankDim,

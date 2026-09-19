@@ -59,10 +59,3 @@ input { font-family: var(--font); }
 
 .nav-item { transition: background .15s, color .15s, border-color .15s; }
 .nav-item:hover { background: var(--frank-dim) !important; color: var(--frank) !important; }
-
-/* Printing a tax invoice should produce just the invoice, not the app chrome */
-@media print {
-  body * { visibility: hidden; }
-  .invoice-print-area, .invoice-print-area * { visibility: visible; }
-  .invoice-print-area { position: absolute; top: 0; left: 0; width: 100%; }
-}

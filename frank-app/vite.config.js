@@ -3,13 +3,15 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'import.meta.env.VITE_ANTHROPIC_API_KEY': JSON.stringify('test-key-123'),
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://test-project.supabase.co'),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify('test-anon-key'),
+  },
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
-    define: {
-      'import.meta.env.VITE_ANTHROPIC_API_KEY': JSON.stringify('test-key-123'),
-    },
   },
   server: {
     port: 3000,

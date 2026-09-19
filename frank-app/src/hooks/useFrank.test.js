@@ -1,6 +1,14 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 
+vi.mock('../lib/supabaseClient.js', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'fake-token' } } }),
+    },
+  },
+}))
+
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
@@ -82,6 +90,8 @@ describe('useFrank — chat hook', () => {
 
     act(() => { result.current.send('hello') })
 
+    // let the getSession() await resolve before checking loading state
+    await act(async () => { await Promise.resolve() })
     expect(result.current.loading).toBe(true)
 
     await act(async () => {
@@ -103,6 +113,20 @@ describe('useFrank — chat hook', () => {
     const lastMsg = result.current.messages[result.current.messages.length - 1]
     expect(lastMsg.role).toBe('assistant')
     expect(lastMsg.content).toContain('Connection error')
+  })
+
+  test('calls the chat-message edge function with a bearer token, not the Anthropic API directly', async () => {
+    mockFetch.mockResolvedValueOnce(assistantResponse('ok'))
+    const { result } = renderHook(() => useFrank())
+
+    await act(async () => {
+      await result.current.send('hello')
+    })
+
+    const [url, options] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://test-project.supabase.co/functions/v1/chat-message')
+    expect(options.headers.Authorization).toBe('Bearer fake-token')
+    expect(options.headers['x-api-key']).toBeUndefined()
   })
 
   test('sends all prior messages in the API request for context', async () => {

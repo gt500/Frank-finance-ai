@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './components/views/Dashboard'
 import { CashFlow } from './components/views/CashFlow'
@@ -9,7 +9,6 @@ import { Debtors } from './components/views/Debtors'
 import { Creditors } from './components/views/Creditors'
 import { Connections } from './components/views/Connections'
 import { Reconciliation } from './components/views/Reconciliation'
-import { Billing } from './components/views/Billing'
 import { Chat } from './components/views/Chat'
 import { useFrank } from './hooks/useFrank'
 import { useWonderlandData } from './hooks/useWonderlandData'
@@ -19,6 +18,7 @@ import { TenantProvider, useTenant } from './context/TenantContext'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Onboarding } from './pages/Onboarding'
+import { BillingReturn } from './pages/BillingReturn'
 
 const VIEW_LABELS = {
   dashboard:  'Dashboard',
@@ -29,12 +29,17 @@ const VIEW_LABELS = {
   ar:         'Debtors',
   ap:         'Creditors',
   reconcile:  'Reconciliation',
-  billing:    'Billing',
   connect:    'Connections',
   chat:       'Ask Zeeder',
 }
 
 export default function App() {
+  // PayGate does a full browser redirect here — it's not part of the
+  // in-app view state, so it's handled before the tenant/login gate.
+  if (window.location.pathname.startsWith('/billing/return')) {
+    return <BillingReturn />
+  }
+
   return (
     <TenantProvider>
       <AppContent />
@@ -43,7 +48,7 @@ export default function App() {
 }
 
 function AppContent() {
-  const { tenant, systemPrompt, currentUser, login, registerAccount } = useTenant()
+  const { tenant, systemPrompt, currentUser, authLoading, login, registerAccount } = useTenant()
   const [authMode, setAuthMode] = useState('login') // 'login' | 'onboarding'
   const [view, setView] = useState('dashboard')
 
@@ -56,15 +61,6 @@ function AppContent() {
     role: 'assistant',
     content: `Good morning. Here's your ${tenant.name} snapshot:\n\n**Cash: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.cash?.toLocaleString('en-ZA') ?? '—'}** · **Revenue: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.rev?.toLocaleString('en-ZA') ?? '—'}/mo**\n\nAsk me anything about your finances.`,
   }])
-
-  // useFrank's message history lives in this component's state, which does
-  // NOT remount on tenant switch — without this, old messages (and their
-  // tenant-specific content) would stay in the array and get sent back to
-  // Claude as context after switching to a different tenant.
-  useEffect(() => {
-    frank.reset()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant.id])
 
   const goChat = useCallback((question) => {
     setView('chat')
@@ -83,11 +79,19 @@ function AppContent() {
     payrollError: isWonderland ? payrollError : null,
   }
 
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="blink" style={{ width: 10, height: 10, borderRadius: '50%', background: C.frank }} />
+      </div>
+    )
+  }
+
   if (!currentUser) {
     if (authMode === 'onboarding') {
       return (
         <Onboarding
-          onComplete={(form) => { registerAccount(form, form.bankExtract) }}
+          onComplete={(form) => { registerAccount(form) }}
           onBack={() => setAuthMode('login')}
         />
       )
@@ -128,7 +132,6 @@ function AppContent() {
           {view === 'ar'         && <Debtors       {...viewProps} onNav={setView} />}
           {view === 'ap'         && <Creditors     {...viewProps} onNav={setView} />}
           {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
-          {view === 'billing'    && <Billing        {...viewProps} />}
           {view === 'connect'    && <Connections   {...viewProps} />}
           {view === 'chat'       && <Chat          frank={frank} />}
         </div>
