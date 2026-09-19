@@ -55,7 +55,7 @@ function ConnCard({ icon, name, desc, status, detail, onAsk, askQ }) {
   )
 }
 
-export function Connections({ onAsk, liveData, loading, error, payrollData, payrollError }) {
+export function Connections({ onAsk, liveData, loading, error, payrollData, payrollError, isWonderland }) {
   const claudeOk  = Boolean(SUPABASE_URL)
   const financeOk = !loading && !error && liveData != null
   const financeErr = !loading && !!error
@@ -81,19 +81,31 @@ export function Connections({ onAsk, liveData, loading, error, payrollData, payr
           askQ={claudeOk ? 'Give me a quick financial summary of the business right now' : null}
         />
 
-        <ConnCard
-          icon="🏫"
-          name="Wonderland Finance API"
-          desc="Live feed of income, expenses, outstanding fees, and learner data direct from Wonderland's management system."
-          status={loading ? 'soon' : financeOk ? 'live' : financeErr ? 'error' : 'off'}
-          detail={
-            loading ? 'Connecting...' :
-            financeOk ? `${liveData?.children?.length ?? '—'} learners · ${liveData?.payments?.length ?? '—'} payment records loaded` :
-            financeErr ? `Connection failed: ${error}` : null
-          }
-          onAsk={onAsk}
-          askQ={financeOk ? 'What does the live Wonderland data tell us about cash flow this month?' : null}
-        />
+        {isWonderland ? (
+          <ConnCard
+            icon="🏫"
+            name="Wonderland Finance API"
+            desc="Live feed of income, expenses, outstanding fees, and learner data direct from Wonderland's management system."
+            status={loading ? 'soon' : financeOk ? 'live' : financeErr ? 'error' : 'off'}
+            detail={
+              loading ? 'Connecting...' :
+              financeOk ? `${liveData?.children?.length ?? '—'} learners · ${liveData?.payments?.length ?? '—'} payment records loaded` :
+              financeErr ? `Connection failed: ${error}` : null
+            }
+            onAsk={onAsk}
+            askQ={financeOk ? 'What does the live Wonderland data tell us about cash flow this month?' : null}
+          />
+        ) : (
+          <ConnCard
+            icon="📤"
+            name="Business Management System"
+            desc="Most small businesses don't run a system Zeeder can connect to directly, and that's fine — upload your statements, invoices, and reports instead and Zeeder reads them just as accurately."
+            status="off"
+            detail="No live connection needed for your business — see Document Upload below"
+            onAsk={onAsk}
+            askQ="What documents should I upload to give Zeeder the best picture of my finances?"
+          />
+        )}
 
         <ConnCard
           icon="👥"

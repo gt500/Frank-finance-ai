@@ -72,6 +72,7 @@ function AppContent() {
   const viewProps = {
     onAsk: goChat,
     frank,
+    isWonderland,
     liveData:     isWonderland ? liveData    : null,
     loading:      isWonderland ? loading     : false,
     error:        isWonderland ? error       : null,
