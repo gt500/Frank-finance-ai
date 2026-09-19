@@ -2,6 +2,7 @@
 // Returns { redirect_url } — send the browser there to capture the card.
 import { createClient } from "npm:@supabase/supabase-js@2"
 import { initiateWebPayment } from "../_shared/paygate.ts"
+import { corsHeaders } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -12,7 +13,8 @@ const PLANS: Record<string, number> = {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 })
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
   try {
     const { tenant_id, plan, first_name, last_name, email } = await req.json()
@@ -57,6 +59,6 @@ Deno.serve(async (req) => {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   })
 }

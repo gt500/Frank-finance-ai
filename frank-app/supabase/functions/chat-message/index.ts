@@ -1,13 +1,15 @@
 // Replaces the direct browser -> api.anthropic.com call in useFrank.js.
 // Requires a Supabase Auth session so this can't be hammered anonymously.
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { corsHeaders } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 })
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
   const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "")
   if (!token) return json({ error: "Missing Authorization header" }, 401)
@@ -50,6 +52,6 @@ Deno.serve(async (req) => {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   })
 }

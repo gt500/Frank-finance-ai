@@ -2,12 +2,14 @@
 // service role's admin API. Caller must be authenticated; we only ever
 // delete the calling user's own account, never an arbitrary id passed in.
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { corsHeaders } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 })
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
   const authHeader = req.headers.get("Authorization") ?? ""
   const token = authHeader.replace("Bearer ", "")
@@ -33,6 +35,6 @@ Deno.serve(async (req) => {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   })
 }
