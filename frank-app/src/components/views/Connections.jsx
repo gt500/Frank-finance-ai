@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { C } from '../../lib/theme'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -15,7 +16,7 @@ function StatusDot({ status }) {
   )
 }
 
-function ConnCard({ icon, name, desc, status, detail, onAsk, askQ }) {
+function CardShell({ icon, name, status, children }) {
   return (
     <div style={{
       background: C.card, borderRadius: 8, padding: '18px 20px',
@@ -31,36 +32,139 @@ function ConnCard({ icon, name, desc, status, detail, onAsk, askQ }) {
           </div>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: detail ? 8 : 0 }}>{desc}</div>
-      {detail && (
-        <div style={{
-          fontSize: 11, color: status === 'error' ? C.warn : C.frank,
-          background: status === 'error' ? `${C.warn}10` : `${C.frank}08`,
-          border: `1px solid ${status === 'error' ? C.warn + '33' : C.frank + '22'}`,
-          borderRadius: 4, padding: '5px 10px', marginBottom: 8,
-        }}>{detail}</div>
-      )}
-      {askQ && (
-        <button
-          onClick={() => onAsk(askQ)}
-          style={{
-            marginTop: 4, padding: '5px 12px', borderRadius: 4,
-            border: `1px solid ${C.frank}33`, background: C.frankDim,
-            color: C.frank, cursor: 'pointer', fontSize: 11, fontWeight: 600,
-          }}>
-          Ask Zeeder →
-        </button>
-      )}
+      {children}
     </div>
   )
 }
 
-export function Connections({ onAsk, liveData, loading, error, payrollData, payrollError, isWonderland }) {
+function Detail({ status, children }) {
+  if (!children) return null
+  return (
+    <div style={{
+      fontSize: 11, color: status === 'error' ? C.warn : C.frank,
+      background: status === 'error' ? `${C.warn}10` : `${C.frank}08`,
+      border: `1px solid ${status === 'error' ? C.warn + '33' : C.frank + '22'}`,
+      borderRadius: 4, padding: '5px 10px', marginBottom: 8,
+    }}>{children}</div>
+  )
+}
+
+function AskButton({ onAsk, askQ }) {
+  if (!askQ) return null
+  return (
+    <button
+      onClick={() => onAsk(askQ)}
+      style={{
+        marginTop: 4, padding: '5px 12px', borderRadius: 4,
+        border: `1px solid ${C.frank}33`, background: C.frankDim,
+        color: C.frank, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+      }}>
+      Ask Zeeder →
+    </button>
+  )
+}
+
+function ConnCard({ icon, name, desc, status, detail, onAsk, askQ }) {
+  return (
+    <CardShell icon={icon} name={name} status={status}>
+      <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: detail ? 8 : 0 }}>{desc}</div>
+      <Detail status={status}>{detail}</Detail>
+      <AskButton onAsk={onAsk} askQ={askQ} />
+    </CardShell>
+  )
+}
+
+// One-click connect: paste a SimplePay API key, validated live against SimplePay on submit.
+function SimplePayCard({ payrollData, payrollLoading, payrollError, simplePayKey, connectSimplePay, disconnectSimplePay, onAsk }) {
+  const [keyInput, setKeyInput] = useState('')
+  const [connecting, setConnecting] = useState(false)
+  const [formError, setFormError] = useState(null)
+
+  const connected = !!simplePayKey
+  const payrollOk = connected && (payrollData?.employees != null || payrollData?.payRuns != null)
+  const status = !connected ? 'off' : payrollLoading ? 'soon' : payrollOk ? 'live' : 'error'
+
+  async function handleConnect() {
+    setFormError(null)
+    setConnecting(true)
+    const result = await connectSimplePay(keyInput)
+    setConnecting(false)
+    if (!result.ok) setFormError(result.error)
+    else setKeyInput('')
+  }
+
+  return (
+    <CardShell icon="👥" name="SimplePay Payroll" status={status}>
+      <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: 8 }}>
+        Pulls live employee records and pay run history from SimplePay. Used to monitor salary costs and payroll dates.
+      </div>
+
+      {connected ? (
+        <>
+          <Detail status={status}>
+            {payrollLoading ? 'Connecting...' :
+             payrollOk ? `${payrollData?.employees?.length ?? '—'} employees · ${payrollData?.payRuns?.length ?? '—'} pay runs` :
+             `Connection failed: ${payrollError ?? 'unknown error'}`}
+          </Detail>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <AskButton onAsk={onAsk} askQ={payrollOk ? 'Summarise the payroll data — headcount, total salary cost, and next pay date' : null} />
+            <button
+              onClick={disconnectSimplePay}
+              style={{
+                marginTop: 4, padding: '5px 12px', borderRadius: 4,
+                border: `1px solid ${C.border}`, background: 'transparent',
+                color: C.dim, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+              }}>
+              Disconnect
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="password"
+              value={keyInput}
+              onChange={e => setKeyInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !connecting && handleConnect()}
+              placeholder="Paste your SimplePay API key"
+              style={{
+                flex: 1, padding: '7px 10px', borderRadius: 4,
+                border: `1px solid ${formError ? C.warn : C.border}`,
+                background: '#0a1828', color: C.text, fontSize: 12,
+                outline: 'none', fontFamily: 'var(--mono)',
+              }}
+            />
+            <button
+              onClick={handleConnect}
+              disabled={connecting || !keyInput.trim()}
+              style={{
+                padding: '7px 14px', borderRadius: 4,
+                border: `1px solid ${C.frank}33`, background: C.frankDim,
+                color: C.frank, cursor: connecting ? 'default' : 'pointer',
+                fontSize: 11, fontWeight: 700, opacity: connecting || !keyInput.trim() ? 0.5 : 1,
+                whiteSpace: 'nowrap',
+              }}>
+              {connecting ? 'Checking…' : 'Connect'}
+            </button>
+          </div>
+          {formError && <div style={{ fontSize: 11, color: C.warn, marginTop: 6 }}>{formError}</div>}
+          <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
+            Get your key from SimplePay → Settings → External API. We verify it immediately and never send it anywhere but SimplePay.
+          </div>
+        </>
+      )}
+    </CardShell>
+  )
+}
+
+export function Connections({
+  onAsk, liveData, loading, error, isWonderland,
+  payrollData, payrollLoading, payrollError, simplePayKey, connectSimplePay, disconnectSimplePay,
+}) {
   const claudeOk  = Boolean(SUPABASE_URL)
   const financeOk = !loading && !error && liveData != null
   const financeErr = !loading && !!error
-  const payrollOk  = payrollData?.employees != null || payrollData?.payRuns != null
-  const payrollErr = !!payrollError
 
   return (
     <div className="fade-up">
@@ -107,20 +211,14 @@ export function Connections({ onAsk, liveData, loading, error, payrollData, payr
           />
         )}
 
-        <ConnCard
-          icon="👥"
-          name="SimplePay Payroll"
-          desc="Pulls live employee records and pay run history from SimplePay. Used to monitor salary costs and payroll dates."
-          status={payrollOk ? 'live' : payrollErr ? 'error' : 'off'}
-          detail={
-            payrollOk
-              ? `${payrollData?.employees?.length ?? '—'} employees · ${payrollData?.payRuns?.length ?? '—'} pay runs`
-              : payrollErr
-              ? 'SimplePay API not responding — upload a payroll PDF instead'
-              : 'Not connected — check VITE_SIMPLEPAY_API_KEY in .env'
-          }
+        <SimplePayCard
+          payrollData={payrollData}
+          payrollLoading={payrollLoading}
+          payrollError={payrollError}
+          simplePayKey={simplePayKey}
+          connectSimplePay={connectSimplePay}
+          disconnectSimplePay={disconnectSimplePay}
           onAsk={onAsk}
-          askQ={payrollOk ? 'Summarise the payroll data — headcount, total salary cost, and next pay date' : null}
         />
 
         <ConnCard

@@ -48,14 +48,18 @@ export default function App() {
 }
 
 function AppContent() {
-  const { tenant, systemPrompt, currentUser, authLoading, login, registerAccount } = useTenant()
+  const {
+    tenant, systemPrompt, currentUser, authLoading, login, registerAccount,
+    simplePayKey, connectSimplePay, disconnectSimplePay,
+  } = useTenant()
   const [authMode, setAuthMode] = useState('login') // 'login' | 'onboarding'
   const [view, setView] = useState('dashboard')
 
-  // Live data hooks — Wonderland-specific; other tenants get null
-  const { data: liveData, loading, error } = useWonderlandData()
-  const { data: payrollData, error: payrollError } = useSimplePayData()
+  // Wonderland Finance API is Wonderland-specific; other tenants get null.
+  // SimplePay is opt-in per tenant — enabled once they connect their own API key.
   const isWonderland = tenant.id === 'wonderland-educare'
+  const { data: liveData, loading, error } = useWonderlandData(isWonderland)
+  const { data: payrollData, loading: payrollLoading, error: payrollError } = useSimplePayData(simplePayKey)
 
   const frank = useFrank([{
     role: 'assistant',
@@ -73,11 +77,15 @@ function AppContent() {
     onAsk: goChat,
     frank,
     isWonderland,
-    liveData:     isWonderland ? liveData    : null,
-    loading:      isWonderland ? loading     : false,
-    error:        isWonderland ? error       : null,
-    payrollData:  isWonderland ? payrollData : null,
-    payrollError: isWonderland ? payrollError : null,
+    liveData:     isWonderland ? liveData : null,
+    loading:      isWonderland ? loading  : false,
+    error:        isWonderland ? error    : null,
+    payrollData,
+    payrollLoading,
+    payrollError,
+    simplePayKey,
+    connectSimplePay,
+    disconnectSimplePay,
   }
 
   if (authLoading) {

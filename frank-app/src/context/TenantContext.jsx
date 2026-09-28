@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useMemo, useEffect } from 'react'
 import { TENANTS, getTenantById } from '../data/tenants'
 import { C } from '../lib/theme'
 import { supabase } from '../lib/supabaseClient'
+import { simplePayApi } from '../lib/simplePayApi'
 
 const TenantContext = createContext(null)
 
@@ -115,6 +116,9 @@ export function TenantProvider({ children }) {
   const [importedData, setImportedData] = useState(() => {
     try { return JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}') } catch { return {} }
   })
+  const [simplePayKeys, setSimplePayKeys] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('zeeder_simplepay_keys') || '{}') } catch { return {} }
+  })
 
   // Load the profile row (email, name, tenant_id) for a Supabase Auth session
   async function loadProfileForSession(session) {
@@ -183,6 +187,28 @@ export function TenantProvider({ children }) {
     const updated = { ...importedData, [activeTenantId]: tenantImport }
     setImportedData(updated)
     localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
+  }
+
+  // One-click connect: validate the key against SimplePay's live API before saving it
+  async function connectSimplePay(apiKey) {
+    const key = apiKey.trim()
+    if (!key) return { ok: false, error: 'Enter an API key' }
+    try {
+      await simplePayApi.verify(key)
+    } catch (err) {
+      return { ok: false, error: err.message }
+    }
+    const updated = { ...simplePayKeys, [activeTenantId]: key }
+    setSimplePayKeys(updated)
+    localStorage.setItem('zeeder_simplepay_keys', JSON.stringify(updated))
+    return { ok: true }
+  }
+
+  function disconnectSimplePay() {
+    const updated = { ...simplePayKeys }
+    delete updated[activeTenantId]
+    setSimplePayKeys(updated)
+    localStorage.setItem('zeeder_simplepay_keys', JSON.stringify(updated))
   }
 
   async function login(email, password) {
@@ -429,6 +455,9 @@ export function TenantProvider({ children }) {
       clearImportedDebtors,
       clearImportedCreditors,
       importedData,
+      simplePayKey: simplePayKeys[activeTenantId] || null,
+      connectSimplePay,
+      disconnectSimplePay,
     }}>
       {children}
     </TenantContext.Provider>

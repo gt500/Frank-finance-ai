@@ -44,12 +44,10 @@ export function Sidebar({ view, onNav, onAsk }) {
       }}>
 
         {/* Logo */}
-        <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ position: 'relative' }}>
-            <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '100%', display: 'block', marginBottom: -28 }} />
-            <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', paddingBottom: 4 }}>
-              Finance OS
-            </div>
+        <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}>
+          <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '80%', display: 'block', margin: '0 auto', marginBottom: -28 }} />
+          <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', paddingBottom: 4 }}>
+            Finance OS
           </div>
         </div>
 

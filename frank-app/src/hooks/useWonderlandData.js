@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { wonderlandApi } from '../lib/wonderlandApi'
 
-export function useWonderlandData() {
+export function useWonderlandData(enabled = true) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
 
   useEffect(() => {
+    if (!enabled) { setData(null); setError(null); setLoading(false); return }
+
     const { from, to } = yearRange()
 
     Promise.all([
@@ -20,7 +22,7 @@ export function useWonderlandData() {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [enabled])
 
   return { data, loading, error }
 }
