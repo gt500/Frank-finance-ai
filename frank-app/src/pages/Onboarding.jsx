@@ -59,6 +59,23 @@ export function Onboarding({ onComplete, onBack }) {
     plan: 'growth',
   })
   const [errors, setErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
+
+  async function handleEnter() {
+    setSubmitError(null)
+    setSubmitting(true)
+    const result = await onComplete(form)
+    if (!result?.ok) {
+      setSubmitError(result?.error || 'Something went wrong creating your account')
+      setSubmitting(false)
+    } else if (result.needsConfirmation) {
+      setNeedsConfirmation(true)
+      setSubmitting(false)
+    }
+    // Otherwise App swaps to the dashboard once currentUser is set — nothing left to do here.
+  }
 
   function set(field, val) {
     setForm(f => ({ ...f, [field]: val }))
@@ -138,7 +155,12 @@ export function Onboarding({ onComplete, onBack }) {
         {step === 0 && <StepAccount form={form} set={set} errors={errors} onNext={handleNext} onBack={onBack} />}
         {step === 1 && <StepBusiness form={form} set={set} errors={errors} onNext={handleNext} onBack={() => setStep(0)} />}
         {step === 2 && <StepPlan form={form} set={set} onNext={handleNext} onBack={() => setStep(1)} />}
-        {step === 3 && <StepReady form={form} onEnter={() => onComplete(form)} />}
+        {step === 3 && (
+          <StepReady
+            form={form} onEnter={handleEnter}
+            submitting={submitting} error={submitError} needsConfirmation={needsConfirmation}
+          />
+        )}
       </div>
     </div>
   )
@@ -285,7 +307,7 @@ function StepPlan({ form, set, onNext, onBack }) {
   )
 }
 
-function StepReady({ form, onEnter }) {
+function StepReady({ form, onEnter, submitting, error, needsConfirmation }) {
   const plan = PLANS.find(p => p.id === form.plan)
   return (
     <>
@@ -295,7 +317,7 @@ function StepReady({ form, onEnter }) {
           {form.businessName} is ready!
         </div>
         <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.7 }}>
-          Your Zeeder Finance OS workspace has been created.<br />
+          Review your details, then create your Zeeder Finance OS workspace.<br />
           Your 14-day free trial starts now.
         </div>
       </div>
@@ -331,9 +353,34 @@ function StepReady({ form, onEnter }) {
         ))}
       </div>
 
-      <button onClick={onEnter} style={{ ...btnPrimary, width: '100%', padding: '15px', fontSize: 15 }}>
-        Enter my dashboard →
-      </button>
+      {error && (
+        <div style={{
+          fontSize: 13, color: C.danger, background: `${C.danger}10`,
+          border: `1px solid ${C.danger}33`, borderRadius: 6,
+          padding: '10px 14px', marginBottom: 16,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {needsConfirmation ? (
+        <div style={{
+          fontSize: 14, color: C.frank, background: `${C.frank}10`,
+          border: `1px solid ${C.frank}33`, borderRadius: 8,
+          padding: '16px 18px', textAlign: 'center', lineHeight: 1.6,
+        }}>
+          Almost there — we've sent a confirmation link to <strong>{form.email}</strong>.<br />
+          Click it, then sign in to enter your dashboard.
+        </div>
+      ) : (
+        <button onClick={onEnter} disabled={submitting}
+          style={{
+            ...btnPrimary, width: '100%', padding: '15px', fontSize: 15,
+            opacity: submitting ? 0.6 : 1, cursor: submitting ? 'default' : 'pointer',
+          }}>
+          {submitting ? 'Creating your workspace…' : 'Enter my dashboard →'}
+        </button>
+      )}
     </>
   )
 }

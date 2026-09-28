@@ -241,30 +241,28 @@ export function TenantProvider({ children }) {
     const email = form.email.trim().toLowerCase()
     const newTenant = buildNewTenant(form)
 
+    // name/tenant_id ride along as user metadata — a DB trigger (see
+    // supabase/migrations) creates the profiles row from this server-side,
+    // since the client has no session yet to satisfy profiles' RLS insert
+    // policy when email confirmation is required.
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password: form.password,
+      options: { data: { name: form.name, tenant_id: newTenant.id } },
     })
     if (signUpError) {
       return { ok: false, error: signUpError.message }
-    }
-    if (!signUpData.user) {
-      return { ok: false, error: 'Check your email to confirm your account, then log in.' }
-    }
-
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: signUpData.user.id,
-      email,
-      name: form.name,
-      tenant_id: newTenant.id,
-    })
-    if (profileError) {
-      return { ok: false, error: `Account created but profile setup failed: ${profileError.message}` }
     }
 
     const updatedCustom = [...customTenants, newTenant]
     setCustomTenants(updatedCustom)
     localStorage.setItem('zeeder_custom_tenants', JSON.stringify(updatedCustom))
+
+    // No session means email confirmation is required — there's nothing
+    // more to do client-side until they confirm and log in.
+    if (!signUpData.session) {
+      return { ok: true, needsConfirmation: true }
+    }
 
     // onAuthStateChange fires from signUp and loads the profile into currentUser/activeTenantId
     return { ok: true }

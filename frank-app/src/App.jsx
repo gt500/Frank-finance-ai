@@ -100,7 +100,7 @@ function AppContent() {
     if (authMode === 'onboarding') {
       return (
         <Onboarding
-          onComplete={(form) => { registerAccount(form) }}
+          onComplete={(form) => registerAccount(form)}
           onBack={() => setAuthMode('login')}
         />
       )

@@ -15,22 +15,10 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    // Proxy Anthropic API calls to avoid CORS in development
     proxy: {
-      '/api/claude': {
-        target: 'https://api.anthropic.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/claude/, ''),
-        headers: {
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-      },
-      '/wl-api': {
-        target: 'https://wonderland-management.replit.app',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/wl-api/, ''),
-      },
+      // SimplePay is the only remaining direct-from-browser third-party call
+      // (per-tenant key, opt-in via Connections). Anthropic and Wonderland
+      // are proxied through Supabase edge functions now, not Vite.
       '/simplepay': {
         target: 'https://payroll.simplepay.cloud',
         changeOrigin: true,

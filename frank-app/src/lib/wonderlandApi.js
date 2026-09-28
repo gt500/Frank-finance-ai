@@ -1,24 +1,32 @@
-// In dev, Vite proxies /wl-api → Replit (avoids CORS). In production, call directly.
-const BASE = import.meta.env.DEV
-  ? '/wl-api'
-  : 'https://wonderland-management.replit.app'
+import { supabase } from './supabaseClient'
 
-const key  = import.meta.env.VITE_FINANCE_API_KEY
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
-const get = async (path) => {
+// Routed through the wonderland-proxy edge function — Wonderland's API sends
+// no CORS headers, so the browser can't call it directly (blocked in prod).
+const call = async (endpoint, params) => {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not signed in — please log in again.')
+
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 15000)
   let res
   try {
-    res = await fetch(`${BASE}${path}`, {
-      headers: { Authorization: `Bearer ${key}` },
+    res = await fetch(`${SUPABASE_URL}/functions/v1/wonderland-proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ endpoint, params }),
       signal: ctrl.signal,
     })
   } finally {
     clearTimeout(timer)
   }
-  if (!res.ok) throw new Error(`Wonderland API ${res.status} — ${path}`)
-  return res.json()
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || `Wonderland API error ${res.status}`)
+  return data
 }
 
 const monthLabel = (date = new Date()) =>
@@ -30,15 +38,8 @@ const yearRange = (date = new Date()) => ({
 })
 
 export const wonderlandApi = {
-  summary:     (month = monthLabel()) =>
-    get(`/api/external/v1/summary?month=${encodeURIComponent(month)}`),
-
-  outstanding: (month = monthLabel()) =>
-    get(`/api/external/v1/outstanding?month=${encodeURIComponent(month)}`),
-
-  children: (status = 'Active') =>
-    get(`/api/external/v1/children?status=${status}`),
-
-  payments: (from = yearRange().from, to = yearRange().to) =>
-    get(`/api/external/v1/payments?from=${from}&to=${to}`),
+  summary:     (month = monthLabel()) => call('summary', { month }),
+  outstanding: (month = monthLabel()) => call('outstanding', { month }),
+  children:    (status = 'Active')    => call('children', { status }),
+  payments:    (from = yearRange().from, to = yearRange().to) => call('payments', { from, to }),
 }
