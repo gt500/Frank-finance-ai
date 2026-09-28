@@ -51,6 +51,22 @@ function Field({ label, error, children }) {
 
 const STEP_LABELS = ['Your account', 'Your business', 'Choose a plan', "You're in!"]
 
+// Supabase's raw auth error strings aren't written for end users — translate
+// the ones we actually see in practice.
+function friendlyAuthError(message) {
+  if (!message) return message
+  if (/rate limit/i.test(message)) {
+    return "We're getting a lot of signups right now — please wait a few minutes and try again."
+  }
+  if (/already registered|already exists/i.test(message)) {
+    return 'An account with this email already exists — try signing in instead.'
+  }
+  if (/invalid format|invalid email/i.test(message)) {
+    return 'That email address looks invalid — please check it and try again.'
+  }
+  return message
+}
+
 export function Onboarding({ onComplete, onBack }) {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState({
@@ -68,7 +84,7 @@ export function Onboarding({ onComplete, onBack }) {
     setSubmitting(true)
     const result = await onComplete(form)
     if (!result?.ok) {
-      setSubmitError(result?.error || 'Something went wrong creating your account')
+      setSubmitError(friendlyAuthError(result?.error) || 'Something went wrong creating your account')
       setSubmitting(false)
     } else if (result.needsConfirmation) {
       setNeedsConfirmation(true)
