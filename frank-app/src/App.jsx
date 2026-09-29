@@ -1,24 +1,26 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, lazy, Suspense } from 'react'
 import { Sidebar } from './components/Sidebar'
-import { Dashboard } from './components/views/Dashboard'
-import { CashFlow } from './components/views/CashFlow'
-import { Reports } from './components/views/Reports'
-import { Health } from './components/views/Health'
-import { Documents } from './components/views/Documents'
-import { Debtors } from './components/views/Debtors'
-import { Creditors } from './components/views/Creditors'
-import { Connections } from './components/views/Connections'
-import { Reconciliation } from './components/views/Reconciliation'
-import { Chat } from './components/views/Chat'
 import { useFrank } from './hooks/useFrank'
 import { useWonderlandData } from './hooks/useWonderlandData'
 import { useSimplePayData } from './hooks/useSimplePayData'
 import { C } from './lib/theme'
 import { TenantProvider, useTenant } from './context/TenantContext'
-import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Onboarding } from './pages/Onboarding'
 import { BillingReturn } from './pages/BillingReturn'
+
+// Lazy-loaded: only one of these renders at a time (conditional on `view`),
+// so each becomes its own chunk instead of bloating the main bundle.
+const Dashboard      = lazy(() => import('./components/views/Dashboard').then(m => ({ default: m.Dashboard })))
+const CashFlow       = lazy(() => import('./components/views/CashFlow').then(m => ({ default: m.CashFlow })))
+const Reports        = lazy(() => import('./components/views/Reports').then(m => ({ default: m.Reports })))
+const Health         = lazy(() => import('./components/views/Health').then(m => ({ default: m.Health })))
+const Documents      = lazy(() => import('./components/views/Documents').then(m => ({ default: m.Documents })))
+const Debtors        = lazy(() => import('./components/views/Debtors').then(m => ({ default: m.Debtors })))
+const Creditors      = lazy(() => import('./components/views/Creditors').then(m => ({ default: m.Creditors })))
+const Connections    = lazy(() => import('./components/views/Connections').then(m => ({ default: m.Connections })))
+const Reconciliation = lazy(() => import('./components/views/Reconciliation').then(m => ({ default: m.Reconciliation })))
+const Chat           = lazy(() => import('./components/views/Chat').then(m => ({ default: m.Chat })))
 
 const VIEW_LABELS = {
   dashboard:  'Dashboard',
@@ -133,16 +135,22 @@ function AppContent() {
 
         {/* Page content */}
         <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
-          {view === 'dashboard'  && <Dashboard     {...viewProps} />}
-          {view === 'cashflow'   && <CashFlow      {...viewProps} />}
-          {view === 'reports'    && <Reports       {...viewProps} />}
-          {view === 'health'     && <Health        {...viewProps} />}
-          {view === 'documents'  && <Documents     {...viewProps} onNav={setView} />}
-          {view === 'ar'         && <Debtors       {...viewProps} onNav={setView} />}
-          {view === 'ap'         && <Creditors     {...viewProps} onNav={setView} />}
-          {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
-          {view === 'connect'    && <Connections   {...viewProps} />}
-          {view === 'chat'       && <Chat          frank={frank} />}
+          <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <div className="blink" style={{ width: 10, height: 10, borderRadius: '50%', background: C.frank }} />
+            </div>
+          }>
+            {view === 'dashboard'  && <Dashboard     {...viewProps} />}
+            {view === 'cashflow'   && <CashFlow      {...viewProps} />}
+            {view === 'reports'    && <Reports       {...viewProps} />}
+            {view === 'health'     && <Health        {...viewProps} />}
+            {view === 'documents'  && <Documents     {...viewProps} onNav={setView} />}
+            {view === 'ar'         && <Debtors       {...viewProps} onNav={setView} />}
+            {view === 'ap'         && <Creditors     {...viewProps} onNav={setView} />}
+            {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
+            {view === 'connect'    && <Connections   {...viewProps} />}
+            {view === 'chat'       && <Chat          frank={frank} />}
+          </Suspense>
         </div>
       </div>
     </div>
