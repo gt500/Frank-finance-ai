@@ -100,7 +100,9 @@ const FIELD_LABELS = {
 
 export function SpreadsheetImporter({ type, onImport, onClose }) {
   const fileRef = useRef(null)
-  const [step, setStep]       = useState('upload') // upload | map | preview
+  const [step, setStep]       = useState('upload') // upload | sheet | map | preview
+  const [workbook, setWorkbook]     = useState(null)
+  const [sheetName, setSheetName]   = useState(null)
   const [headers, setHeaders] = useState([])
   const [rows, setRows]       = useState([])
   const [mapping, setMapping] = useState({})
@@ -112,6 +114,22 @@ export function SpreadsheetImporter({ type, onImport, onClose }) {
     ? ['name', 'amount']
     : ['name', 'amount']
 
+  async function parseSheet(wb, name) {
+    const XLSX = await import('xlsx') // cached after handleFile's import — effectively free
+    const ws = wb.Sheets[name]
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+    if (!aoa.length) { setError('That sheet is empty or could not be read.'); return }
+    const { headers: hdrs, rows: data } = aoaToRows(aoa)
+    if (!data.length) { setError('That sheet is empty or could not be read.'); return }
+    const autoMap = {}
+    hdrs.forEach(h => { autoMap[h] = detectColumn(h, patterns) })
+    setHeaders(hdrs)
+    setRows(data)
+    setMapping(autoMap)
+    setError('')
+    setStep('map')
+  }
+
   async function handleFile(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -120,17 +138,17 @@ export function SpreadsheetImporter({ type, onImport, onClose }) {
       const XLSX = await import('xlsx')
       const arrayBuffer = await file.arrayBuffer()
       const wb = XLSX.read(arrayBuffer, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-      if (!aoa.length) { setError('Spreadsheet is empty or could not be read.'); return }
-      const { headers: hdrs, rows: data } = aoaToRows(aoa)
-      if (!data.length) { setError('Spreadsheet is empty or could not be read.'); return }
-      const autoMap = {}
-      hdrs.forEach(h => { autoMap[h] = detectColumn(h, patterns) })
-      setHeaders(hdrs)
-      setRows(data)
-      setMapping(autoMap)
-      setStep('map')
+      setWorkbook(wb)
+      if (wb.SheetNames.length > 1) {
+        // Default to the last sheet — exports like this tend to be
+        // chronological, so the last one is usually the most recent.
+        const last = wb.SheetNames[wb.SheetNames.length - 1]
+        setSheetName(last)
+        setStep('sheet')
+      } else {
+        setSheetName(wb.SheetNames[0])
+        parseSheet(wb, wb.SheetNames[0])
+      }
     } catch {
       setError('Could not read file. Make sure it is a valid .xlsx, .xls, or .csv file.')
     }
@@ -197,13 +215,40 @@ export function SpreadsheetImporter({ type, onImport, onClose }) {
                 Click to select your spreadsheet
               </div>
               <div style={{ fontSize: 12, color: C.sub }}>
-                .xlsx · .xls · .csv — first sheet will be used
+                .xlsx · .xls · .csv — you'll pick the sheet next if there's more than one
               </div>
             </div>
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: 'none' }} />
             {error && <div style={{ color: C.danger, fontSize: 13, marginTop: 8 }}>{error}</div>}
             <div style={{ marginTop: 16, padding: '12px 16px', background: `${C.frank}08`, border: `1px solid ${C.frank}20`, borderRadius: 8, fontSize: 12, color: C.sub }}>
               <strong style={{ color: C.gold }}>Google Sheets:</strong> File → Download → Microsoft Excel (.xlsx)
+            </div>
+          </>
+        )}
+
+        {/* Step: Pick sheet (only shown when the workbook has more than one) */}
+        {step === 'sheet' && (
+          <>
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
+              This file has {workbook.SheetNames.length} sheets. Pick the one to import.
+            </div>
+            <select
+              value={sheetName}
+              onChange={e => setSheetName(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 6,
+                border: `1px solid ${C.border}`, background: C.bg,
+                color: C.text, fontSize: 13, fontFamily: FONT_BODY, outline: 'none',
+                marginBottom: 20, boxSizing: 'border-box',
+              }}>
+              {workbook.SheetNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setStep('upload')} style={{ padding: '10px 18px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.sub, fontSize: 13, cursor: 'pointer', fontFamily: FONT_BODY }}>← Back</button>
+              <button onClick={() => parseSheet(workbook, sheetName)} style={{ flex: 1, padding: '10px', borderRadius: 6, border: 'none', background: C.frank, color: '#000', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_BODY }}>
+                Use "{sheetName}" →
+              </button>
             </div>
           </>
         )}
@@ -237,7 +282,7 @@ export function SpreadsheetImporter({ type, onImport, onClose }) {
             </div>
             {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setStep('upload')} style={{ padding: '10px 18px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.sub, fontSize: 13, cursor: 'pointer', fontFamily: FONT_BODY }}>← Back</button>
+              <button onClick={() => setStep(workbook?.SheetNames.length > 1 ? 'sheet' : 'upload')} style={{ padding: '10px 18px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.sub, fontSize: 13, cursor: 'pointer', fontFamily: FONT_BODY }}>← Back</button>
               <button onClick={handleConfirmMapping} style={{ flex: 1, padding: '10px', borderRadius: 6, border: 'none', background: C.frank, color: '#000', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_BODY }}>
                 Preview {rows.length} rows →
               </button>
