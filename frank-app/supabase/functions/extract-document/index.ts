@@ -47,6 +47,11 @@ Deno.serve(async (req) => {
     if (res.status === 429) {
       await new Promise((r) => setTimeout(r, 65000))
       res = await callApi()
+    } else if (res.status === 503 && !res.headers.get("request-id")) {
+      // A bare Cloudflare 503 (no request-id — never reached Anthropic's
+      // app) has been observed on some edge PoPs. It's transient per-PoP,
+      // so one retry usually lands on a healthy route.
+      res = await callApi()
     }
 
     const raw = await res.text()

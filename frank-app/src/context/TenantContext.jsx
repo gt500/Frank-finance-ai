@@ -417,7 +417,9 @@ export function TenantProvider({ children }) {
       const imp = JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}')
       delete imp[tenantId]
       localStorage.setItem('zeeder_imported_data', JSON.stringify(imp))
-    } catch {}
+    } catch {
+      // best-effort cleanup — corrupted localStorage blob shouldn't block account deletion
+    }
     await supabase.auth.signOut()
     setCurrentUser(null)
     localStorage.removeItem('zeeder_tenant')
