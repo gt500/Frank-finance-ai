@@ -5,7 +5,10 @@ import { corsHeaders } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!
+// .trim() defensively — a stray trailing newline/space from copy-pasting the
+// secret in produces a malformed x-api-key header and a confusing non-JSON
+// 503 from Anthropic's edge instead of a clean 401. Seen this exact failure.
+const ANTHROPIC_API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim()
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
@@ -46,7 +49,15 @@ Deno.serve(async (req) => {
       res = await callApi()
     }
 
-    const data = await res.json()
+    const raw = await res.text()
+    let data
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      console.error("Anthropic returned non-JSON:", res.status, raw.slice(0, 500))
+      return json({ error: `Anthropic returned an unexpected response (HTTP ${res.status}): ${raw.slice(0, 200) || '(empty body)'}` }, 502)
+    }
+
     if (!res.ok) return json({ error: data?.error?.message ?? `API error ${res.status}` }, res.status)
 
     return json(data)

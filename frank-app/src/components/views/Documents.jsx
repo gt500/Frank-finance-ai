@@ -145,7 +145,7 @@ export function Documents({ onAsk, onNav }) {
             multiple
             accept=".pdf,.csv,.jpg,.jpeg,.png,.webp,.xlsx,.xls"
             style={{ display: 'none' }}
-            onChange={e => handleFiles(e.target.files)}
+            onChange={e => { handleFiles(e.target.files); e.target.value = '' }}
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 18 }}>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { C, FONT_BODY, FONT_SUB } from '../lib/theme'
 import { useTenant, AdminSwitcher } from '../context/TenantContext'
+import { supabase } from '../lib/supabaseClient'
 
 const NAV_ITEMS = [
   { id: 'dashboard',  label: 'Dashboard',       icon: '▦' },
@@ -177,15 +178,18 @@ export function Sidebar({ view, onNav, onAsk }) {
           </div>
           <button onClick={async () => {
               try {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (!session) throw new Error('Not signed in — please log in again.')
                 const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-initiate`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
                   body: JSON.stringify({
-                    tenant_id: tenant.id,
                     plan: 'growth',
-                    first_name: currentUser?.name?.split(' ')[0] ?? 'Customer',
-                    last_name: currentUser?.name?.split(' ').slice(1).join(' ') ?? '',
-                    email: currentUser?.email,
+                    first_name: currentUser?.name?.split(' ')[0],
+                    last_name: currentUser?.name?.split(' ').slice(1).join(' '),
                   }),
                 })
                 const data = await res.json()

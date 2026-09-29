@@ -61,7 +61,7 @@ export function useFrank(initialMessages = []) {
       setError(err.message)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Connection error. Please try again.',
+        content: `Connection error: ${err.message || 'please try again.'}`,
       }])
     } finally {
       setLoading(false)
