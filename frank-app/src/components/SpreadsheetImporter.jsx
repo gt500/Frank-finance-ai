@@ -19,6 +19,32 @@ const CREDITOR_PATTERNS = {
   overdue:  ['overdue', 'status', 'past due'],
 }
 
+// Report exports (Pastel, Sage, Xero aged debtor/creditor reports, etc.)
+// often lead with a title row like "MONTH: Jan 09" before the real column
+// headers. Blindly treating row 1 as headers grabs that title instead —
+// scan for the first row that actually looks like a header row (several
+// populated cells) rather than assuming it's row 1.
+function findHeaderRowIndex(aoa) {
+  const scanLimit = Math.min(aoa.length, 10)
+  for (let i = 0; i < scanLimit; i++) {
+    const populated = aoa[i].filter(c => String(c ?? '').trim() !== '').length
+    if (populated >= 2) return i
+  }
+  return 0
+}
+
+export function aoaToRows(aoa) {
+  const headerRow = findHeaderRowIndex(aoa)
+  const headers = aoa[headerRow].map((h, i) => {
+    const trimmed = String(h ?? '').trim()
+    return trimmed || `Column ${i + 1}`
+  })
+  const rows = aoa.slice(headerRow + 1)
+    .filter(row => row.some(c => String(c ?? '').trim() !== ''))
+    .map(row => Object.fromEntries(headers.map((h, i) => [h, row[i] ?? ''])))
+  return { headers, rows }
+}
+
 function detectColumn(header, patterns) {
   const h = (header || '').toLowerCase().trim()
   for (const [key, terms] of Object.entries(patterns)) {
@@ -95,9 +121,10 @@ export function SpreadsheetImporter({ type, onImport, onClose }) {
       const arrayBuffer = await file.arrayBuffer()
       const wb = XLSX.read(arrayBuffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      const data = XLSX.utils.sheet_to_json(ws, { defval: '' })
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+      if (!aoa.length) { setError('Spreadsheet is empty or could not be read.'); return }
+      const { headers: hdrs, rows: data } = aoaToRows(aoa)
       if (!data.length) { setError('Spreadsheet is empty or could not be read.'); return }
-      const hdrs = Object.keys(data[0])
       const autoMap = {}
       hdrs.forEach(h => { autoMap[h] = detectColumn(h, patterns) })
       setHeaders(hdrs)
