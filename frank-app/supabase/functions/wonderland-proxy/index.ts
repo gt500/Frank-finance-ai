@@ -7,7 +7,11 @@ import { corsHeaders } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-const WONDERLAND_API_KEY = Deno.env.get("WONDERLAND_API_KEY")!
+// .trim() defensively — a stray trailing newline/space from copy-pasting the
+// secret in produces a malformed Authorization header and a 401 from
+// Wonderland even though the key itself is correct. Seen this exact failure
+// with ANTHROPIC_API_KEY earlier.
+const WONDERLAND_API_KEY = (Deno.env.get("WONDERLAND_API_KEY") ?? "").trim()
 
 const BASE = "https://wonderland-management.replit.app"
 
