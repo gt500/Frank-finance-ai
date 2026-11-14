@@ -1,463 +1,188 @@
-import { createContext, useContext, useState, useMemo, useEffect } from 'react'
-import { TENANTS, getTenantById } from '../data/tenants'
+import { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react'
+import { TENANTS } from '../data/tenants'
 import { C } from '../lib/theme'
 import { supabase } from '../lib/supabaseClient'
 import { simplePayApi } from '../lib/simplePayApi'
+import { buildMonthlyEntry, mergeMonthly } from '../lib/monthlyHistory'
 
 const TenantContext = createContext(null)
-
 const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN
+const LEGACY_KEYS = ['zeeder_accounts','zeeder_user','zeeder_custom_tenants','zeeder_imported_data','zeeder_simplepay_keys','zeeder_tenant']
 
-// Strip common SA bank prefixes and return a readable entity name
 function extractEntityName(description) {
   if (!description) return 'Unknown'
   const cleaned = description
     .replace(/^(PAYMENT FROM|PAYMENT TO|TRF FROM|TRF TO|INTERNET TRF|CDT TRF|DBT ORDER|DEBIT ORDER|POS PURCHASE|ATM WITHDRAWAL|DIRECT DEP|ACH CREDIT|SALARY|WAGES)\s*/i, '')
-    .replace(/\s+\d{6,}.*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+    .replace(/\s+\d{6,}.*$/, '').replace(/\s+/g, ' ').trim()
   return cleaned.split(' ').slice(0, 3).join(' ') || description.substring(0, 25)
 }
-
-// Match a transaction description against a list of known names
 function findMatch(description, knownNames) {
   const desc = (description || '').toLowerCase()
-  return knownNames.find(n => {
-    const name = (n || '').toLowerCase()
-    const firstWord = name.split(' ')[0]
-    return firstWord.length > 2 && desc.includes(firstWord)
-  }) || null
-}
-
-// Accounts now live in Supabase Auth — see supabase/migrations/20260920a_profiles_and_rls.sql.
-// The two accounts that used to be hardcoded here (admin@capefresh.co.za,
-// bev@wonderlandeducare.com) need to be created once via supabase.auth.signUp
-// or the Supabase dashboard, with a matching row in `profiles` setting their
-// tenant_id to 'cape-fresh-grocery' / 'wonderland-educare'.
-
-function buildNewTenant(form) {
-  const id = `tenant-${Date.now()}`
-  const planPrice = form.plan === 'growth' ? 999 : 499
-  const planName  = form.plan === 'growth' ? 'Growth' : 'Starter'
-  const now = new Date()
-  const monthLabel = now.toLocaleString('en-ZA', { month: 'short', year: '2-digit' })
-  return {
-    id,
-    name: form.businessName,
-    owner: form.name,
-    sector: form.sector,
-    staff: parseInt(form.staff) || 1,
-    location: form.location,
-    children: null,
-    plan: planName,
-    planPrice,
-    trialStart: new Date().toISOString(),
-    data: {
-      MONTHLY: [{ month: monthLabel, rev: 0, cost: 0, profit: 0, cash: 0 }],
-      WEEKLY_FORECAST: [],
-      EXPENSES: [
-        { label: 'Staff', value: 40 }, { label: 'Rent', value: 20 },
-        { label: 'Admin', value: 15 }, { label: 'Other', value: 25 },
-      ],
-      DEBTORS: [], CREDITORS: [], CASHFLOW_FLAGS: [],
-      HEALTH_CHECKS: [
-        { name: 'Cash Runway',         score: 0, note: 'Upload a bank statement to calculate' },
-        { name: 'Revenue Trend',        score: 0, note: 'No data yet' },
-        { name: 'Expense Control',      score: 0, note: 'No data yet' },
-        { name: 'Debtor Collection',    score: 0, note: 'No data yet' },
-        { name: 'Creditor Management',  score: 0, note: 'No data yet' },
-        { name: 'Working Capital',      score: 0, note: 'No data yet' },
-      ],
-      BRIEFING: [
-        { severity: 'med', text: `Welcome to Zeeder! Your ${form.businessName} workspace is ready.` },
-        { severity: 'med', text: 'Upload a bank statement to populate your cash flow dashboard.' },
-        { severity: 'med', text: 'Add your debtors and creditors for a complete financial picture.' },
-      ],
-    },
-    systemPrompt: `You are Zeeder, a financial AI assistant for ${form.businessName}, a ${form.sector} business based in ${form.location} with ${parseInt(form.staff) || 1} staff. The owner's name is ${form.name}. Help with financial analysis, cash flow insights, and business advice. Be concise and practical.`,
-  }
+  return knownNames.find(n => { const w = (n || '').toLowerCase().split(' ')[0]; return w.length > 2 && desc.includes(w) }) || null
 }
 
 export function TenantProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [customTenants, setCustomTenants] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zeeder_custom_tenants') || '[]') } catch { return [] }
-  })
-  const [activeTenantId, setActiveTenantId] = useState(
-    () => localStorage.getItem('zeeder_tenant') || TENANTS[0].id
-  )
+  const [tenant, setTenant] = useState(null)          // null = loading/unknown — NEVER another tenant
+  const [tenantError, setTenantError] = useState(null)
+  const [bankData, setBankData] = useState(null)
+  const [imported, setImported] = useState({})
+  const [monthly, setMonthly] = useState(null)
+  const [simplePayConnected, setSimplePayConnected] = useState(false)
+  const [subscription, setSubscription] = useState(null)
   const [adminUnlocked, setAdminUnlocked] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState({ count: 0, lockedUntil: 0 })
-  const [bankData, setBankData] = useState(() => {
-    try {
-      const id = localStorage.getItem('zeeder_tenant') || TENANTS[0].id
-      const stored = localStorage.getItem(`zeeder_bank_${id}`)
-      return stored ? JSON.parse(stored) : null
-    } catch { return null }
-  })
+  const tid = currentUser?.tenantId
 
-  // Persist bank data per tenant whenever it changes
-  useEffect(() => {
-    if (bankData) {
-      localStorage.setItem(`zeeder_bank_${activeTenantId}`, JSON.stringify(bankData))
-    } else {
-      localStorage.removeItem(`zeeder_bank_${activeTenantId}`)
+  // Cloud persistence (P0-3). Demo tenant = in-memory only.
+  const persist = useCallback((patch) => {
+    if (!tid || tenant?.demo) return
+    supabase.from('tenant_data')
+      .upsert({ tenant_id: tid, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
+      .then(({ error }) => { if (error) console.error('Save failed:', error.message) })
+  }, [tid, tenant])
+
+  async function loadWorkspace(profile) {
+    setTenantError(null)
+    // Static demo definitions live in code; custom tenants live in the DB. No fallback to TENANTS[0].
+    let t = TENANTS.find(x => x.id === profile.tenant_id) || null
+    if (!t) {
+      const { data } = await supabase.from('tenants').select('profile').eq('id', profile.tenant_id).maybeSingle()
+      t = data?.profile || null
     }
-  }, [bankData, activeTenantId])
+    if (!t) { setTenant(null); setTenantError('Workspace not found for this account. Contact support.'); return }
+    setTenant(t)
+    const { data: td } = await supabase.from('tenant_data').select('*').eq('tenant_id', profile.tenant_id).maybeSingle()
+    const stored = t.demo ? null : td
+    setBankData(stored?.bank_data || null)
+    setImported(stored?.imported || {})
+    setMonthly(stored?.monthly || null)
+    setSimplePayConnected(!!stored?.simplepay_connected)
+    const { data: sub } = await supabase.from('subscriptions').select('status, plan, amount_cents')
+      .eq('tenant_id', profile.tenant_id).eq('status', 'active').limit(1).maybeSingle()
+    setSubscription(sub || null)
+  }
 
-  // Load the correct bank data when tenant switches
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(`zeeder_bank_${activeTenantId}`)
-      setBankData(stored ? JSON.parse(stored) : null)
-    } catch { setBankData(null) }
-  }, [activeTenantId])
-  const [importedData, setImportedData] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}') } catch { return {} }
-  })
-  const [simplePayKeys, setSimplePayKeys] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('zeeder_simplepay_keys') || '{}') } catch { return {} }
-  })
-
-  // Load the profile row (email, name, tenant_id) for a Supabase Auth session
   async function loadProfileForSession(session) {
-    if (!session?.user) { setCurrentUser(null); return }
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('email, name, tenant_id')
-      .eq('id', session.user.id)
-      .single()
-    if (error || !profile) {
-      console.error('No profile row for this user — sign-up may not have completed', error)
-      setCurrentUser(null)
-      return
-    }
-    setCurrentUser({ email: profile.email, name: profile.name, tenantId: profile.tenant_id })
-    setActiveTenantId(profile.tenant_id)
-    localStorage.setItem('zeeder_tenant', profile.tenant_id)
+    if (!session?.user) { setCurrentUser(null); setTenant(null); return }
+    const { data: profile, error } = await supabase.from('profiles')
+      .select('email, name, tenant_id, created_at').eq('id', session.user.id).single()
+    if (error || !profile) { setCurrentUser(null); setTenantError('No profile for this account.'); return }
+    // One-time purge of legacy browser storage (old cross-tenant leak vector).
+    LEGACY_KEYS.forEach(k => localStorage.removeItem(k))
+    Object.keys(localStorage).filter(k => k.startsWith('zeeder_bank_')).forEach(k => localStorage.removeItem(k))
+    const trialDaysLeft = Math.max(0, 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / 86400000))
+    setCurrentUser({ email: profile.email, name: profile.name, tenantId: profile.tenant_id, trialDaysLeft })
+    await loadWorkspace(profile)
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      loadProfileForSession(session).finally(() => setAuthLoading(false))
-    })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadProfileForSession(session)
-    })
+    supabase.auth.getSession().then(({ data: { session } }) => { loadProfileForSession(session).finally(() => setAuthLoading(false)) })
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => { loadProfileForSession(session) })
     return () => listener.subscription.unsubscribe()
   }, [])
 
-
-  const allTenants = useMemo(() => [...TENANTS, ...customTenants], [customTenants])
-  const tenant = useMemo(() => allTenants.find(t => t.id === activeTenantId) || allTenants[0], [allTenants, activeTenantId])
-
   const mergedData = useMemo(() => {
-    const imp = importedData[activeTenantId] || {}
-    return {
-      ...tenant.data,
-      DEBTORS:   imp.DEBTORS   ?? tenant.data.DEBTORS,
-      CREDITORS: imp.CREDITORS ?? tenant.data.CREDITORS,
-    }
-  }, [tenant, activeTenantId, importedData])
+    if (!tenant) return null
+    return { ...tenant.data,
+      MONTHLY: monthly ?? tenant.data.MONTHLY,
+      DEBTORS: imported.DEBTORS ?? tenant.data.DEBTORS,
+      CREDITORS: imported.CREDITORS ?? tenant.data.CREDITORS }
+  }, [tenant, monthly, imported])
 
-  function importDebtors(rows) {
-    const updated = { ...importedData, [activeTenantId]: { ...(importedData[activeTenantId] || {}), DEBTORS: rows } }
-    setImportedData(updated)
-    localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
+  function setImport(kind, rows) { const next = { ...imported, [kind]: rows }; setImported(next); persist({ imported: next }) }
+  function clearImport(kind) { const next = { ...imported }; delete next[kind]; setImported(next); persist({ imported: next }) }
+
+  // SimplePay via server-side proxy — the key never lives in the browser.
+  async function connectSimplePay(apiKey, clientId) {
+    const r = await simplePayApi.connect(apiKey, clientId)
+    if (r.ok) setSimplePayConnected(true)
+    return r
   }
-
-  function importCreditors(rows) {
-    const updated = { ...importedData, [activeTenantId]: { ...(importedData[activeTenantId] || {}), CREDITORS: rows } }
-    setImportedData(updated)
-    localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
-  }
-
-  function clearImportedDebtors() {
-    const tenantImport = { ...(importedData[activeTenantId] || {}) }
-    delete tenantImport.DEBTORS
-    const updated = { ...importedData, [activeTenantId]: tenantImport }
-    setImportedData(updated)
-    localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
-  }
-
-  function clearImportedCreditors() {
-    const tenantImport = { ...(importedData[activeTenantId] || {}) }
-    delete tenantImport.CREDITORS
-    const updated = { ...importedData, [activeTenantId]: tenantImport }
-    setImportedData(updated)
-    localStorage.setItem('zeeder_imported_data', JSON.stringify(updated))
-  }
-
-  // One-click connect: validate the key against SimplePay's live API before saving it
-  async function connectSimplePay(apiKey) {
-    const key = apiKey.trim()
-    if (!key) return { ok: false, error: 'Enter an API key' }
-    try {
-      await simplePayApi.verify(key)
-    } catch (err) {
-      return { ok: false, error: err.message }
-    }
-    const updated = { ...simplePayKeys, [activeTenantId]: key }
-    setSimplePayKeys(updated)
-    localStorage.setItem('zeeder_simplepay_keys', JSON.stringify(updated))
-    return { ok: true }
-  }
-
-  function disconnectSimplePay() {
-    const updated = { ...simplePayKeys }
-    delete updated[activeTenantId]
-    setSimplePayKeys(updated)
-    localStorage.setItem('zeeder_simplepay_keys', JSON.stringify(updated))
+  async function disconnectSimplePay() {
+    try { await simplePayApi.disconnect() } catch (e) { console.error(e.message) }
+    setSimplePayConnected(false)
   }
 
   async function login(email, password) {
     const now = Date.now()
-    if (loginAttempts.lockedUntil > now) {
-      const secs = Math.ceil((loginAttempts.lockedUntil - now) / 1000)
-      return { ok: false, error: `Too many failed attempts — wait ${secs}s before trying again` }
-    }
+    if (loginAttempts.lockedUntil > now) return { ok: false, error: `Too many failed attempts — wait ${Math.ceil((loginAttempts.lockedUntil - now) / 1000)}s` }
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      const newCount = loginAttempts.count + 1
-      setLoginAttempts(newCount >= 5
-        ? { count: 0, lockedUntil: now + 30000 }
-        : { count: newCount, lockedUntil: 0 })
-      return { ok: false, error: 'Invalid email or password' }
-    }
-    setLoginAttempts({ count: 0, lockedUntil: 0 })
-    // currentUser/activeTenantId are set by the onAuthStateChange listener above
-    return { ok: true }
+    if (error) { const n = loginAttempts.count + 1; setLoginAttempts(n >= 5 ? { count: 0, lockedUntil: now + 30000 } : { count: n, lockedUntil: 0 }); return { ok: false, error: 'Invalid email or password' } }
+    setLoginAttempts({ count: 0, lockedUntil: 0 }); return { ok: true }
   }
-
-  async function logout() {
-    await supabase.auth.signOut()
-    setCurrentUser(null)
-    setBankData(null)
-    setAdminUnlocked(false)
-  }
-
+  async function logout() { await supabase.auth.signOut(); setCurrentUser(null); setTenant(null); setBankData(null); setSubscription(null); setAdminUnlocked(false) }
   async function registerAccount(form) {
-    const email = form.email.trim().toLowerCase()
-    const newTenant = buildNewTenant(form)
-
-    // name/tenant_id ride along as user metadata — a DB trigger (see
-    // supabase/migrations) creates the profiles row from this server-side,
-    // since the client has no session yet to satisfy profiles' RLS insert
-    // policy when email confirmation is required.
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password: form.password,
-      options: { data: { name: form.name, tenant_id: newTenant.id } },
+    // Profile + tenant are created server-side by the handle_new_user trigger.
+    const { data, error } = await supabase.auth.signUp({
+      email: form.email.trim().toLowerCase(), password: form.password,
+      options: { data: { name: form.name, tenant_id: `tenant-${Date.now()}`, business_name: form.businessName, sector: form.sector, location: form.location, staff: form.staff, plan: form.plan } },
     })
-    if (signUpError) {
-      return { ok: false, error: signUpError.message }
-    }
-
-    const updatedCustom = [...customTenants, newTenant]
-    setCustomTenants(updatedCustom)
-    localStorage.setItem('zeeder_custom_tenants', JSON.stringify(updatedCustom))
-
-    // No session means email confirmation is required — there's nothing
-    // more to do client-side until they confirm and log in.
-    if (!signUpData.session) {
-      return { ok: true, needsConfirmation: true }
-    }
-
-    // onAuthStateChange fires from signUp and loads the profile into currentUser/activeTenantId
-    return { ok: true }
+    if (error) return { ok: false, error: error.message }
+    return { ok: true, needsConfirmation: !data.session }
   }
 
-  function switchTenant(id) {
-    localStorage.setItem('zeeder_tenant', id)
-    setActiveTenantId(id)
-    setAdminUnlocked(false)
-    setBankData(null)
+  async function cancelSubscription() {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-cancel`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
+    const out = await res.json(); if (res.ok) setSubscription(null); return { ok: res.ok, error: out.error }
   }
-
-  function unlockAdmin(pin) {
-    if (pin === ADMIN_PIN) { setAdminUnlocked(true); return true }
-    return false
+  async function deleteAccount() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
+    await supabase.auth.signOut(); setCurrentUser(null); setTenant(null); setBankData(null); setSubscription(null)
   }
-
-  function lockAdmin() { setAdminUnlocked(false) }
 
   function loadBankStatement(extractedData) {
-    const {
-      transactions = [],
-      bank_name = 'Bank',
-      period_start = '',
-      period_end = '',
-      opening_balance = 0,
-      closing_balance = 0,
-    } = extractedData
-
-    const debtorNames   = (tenant.data.DEBTORS  || []).map(d => d.name)
-    const creditorNames = (tenant.data.CREDITORS || []).map(c => c.name || c.supplier)
-
-    const credits = transactions
-      .filter(t => (t.credit || 0) > 0)
-      .map((t, i) => {
-        const matched = findMatch(t.description, debtorNames)
-        return {
-          id: `cr-${i}`,
-          date: t.date,
-          description: t.description,
-          amount: t.credit,
-          entityName: matched || extractEntityName(t.description),
-          matchedName: matched,
-          category: t.category || 'Unknown',
-          confirmed: false,
-        }
-      })
-
-    const debits = transactions
-      .filter(t => (t.debit || 0) > 0)
-      .map((t, i) => {
-        const matched = findMatch(t.description, creditorNames)
-        return {
-          id: `db-${i}`,
-          date: t.date,
-          description: t.description,
-          amount: t.debit,
-          entityName: matched || extractEntityName(t.description),
-          matchedName: matched,
-          category: t.category || 'Unknown',
-          confirmed: false,
-        }
-      })
-
-    setBankData({
-      bankName: bank_name,
-      periodStart: period_start,
-      periodEnd: period_end,
-      openingBalance: opening_balance,
-      closingBalance: closing_balance,
-      credits,
-      debits,
-      isConfirmed: false,
-      confirmedDebtors: null,
-      confirmedCreditors: null,
-    })
+    const { transactions = [], bank_name = 'Bank', period_start = '', period_end = '', opening_balance = 0, closing_balance = 0 } = extractedData
+    const debtorNames = (mergedData?.DEBTORS || []).map(d => d.name)
+    const creditorNames = (mergedData?.CREDITORS || []).map(c => c.name || c.supplier)
+    const map = (t, i, amt, prefix) => {
+      const matched = findMatch(t.description, prefix === 'cr' ? debtorNames : creditorNames)
+      return { id: `${prefix}-${i}`, date: t.date, description: t.description, amount: amt, entityName: matched || extractEntityName(t.description), matchedName: matched, category: t.category || 'Unknown', confirmed: false }
+    }
+    const next = { bankName: bank_name, periodStart: period_start, periodEnd: period_end, openingBalance: opening_balance, closingBalance: closing_balance,
+      credits: transactions.filter(t => (t.credit || 0) > 0).map((t, i) => map(t, i, t.credit, 'cr')),
+      debits: transactions.filter(t => (t.debit || 0) > 0).map((t, i) => map(t, i, t.debit, 'db')),
+      isConfirmed: false, confirmedDebtors: null, confirmedCreditors: null }
+    setBankData(next); persist({ bank_data: next })
   }
-
   function updateEntityName(type, id, newName) {
     setBankData(prev => {
       if (!prev) return prev
       const key = type === 'credit' ? 'credits' : 'debits'
-      return {
-        ...prev,
-        [key]: prev[key].map(t => t.id === id ? { ...t, entityName: newName, confirmed: true } : t),
-      }
+      const next = { ...prev, [key]: prev[key].map(t => t.id === id ? { ...t, entityName: newName, confirmed: true } : t) }
+      persist({ bank_data: next }); return next
     })
   }
-
   function confirmBankReconciliation() {
     if (!bankData) return
-    // Group credits by entityName → debtors
-    const creditGroups = {}
-    bankData.credits.forEach(t => {
-      const key = t.entityName || 'Unknown'
-      if (!creditGroups[key]) creditGroups[key] = { name: key, amount: 0, transactions: [] }
-      creditGroups[key].amount += t.amount
-      creditGroups[key].transactions.push(t)
-    })
-    // Group debits by entityName → creditors
-    const debitGroups = {}
-    bankData.debits.forEach(t => {
-      const key = t.entityName || 'Unknown'
-      if (!debitGroups[key]) debitGroups[key] = { name: key, amount: 0, transactions: [] }
-      debitGroups[key].amount += t.amount
-      debitGroups[key].transactions.push(t)
-    })
-
-    const confirmedDebtors = Object.values(creditGroups).map((g, i) => ({
-      name: g.name,
-      reference: `BANK-${String(i + 1).padStart(3, '0')}`,
-      amount: Math.round(g.amount),
-      days_overdue: 0,
-      due_date: bankData.periodEnd,
-      source: 'bank',
-    }))
-
-    const confirmedCreditors = Object.values(debitGroups).map((g, i) => ({
-      name: g.name,
-      supplier: g.name,
-      ref: `BANK-${String(i + 1).padStart(3, '0')}`,
-      amount: Math.round(g.amount),
-      due: bankData.periodEnd,
-      daysLeft: 0,
-      overdue: false,
-      source: 'bank',
-    }))
-
-    setBankData(prev => ({ ...prev, isConfirmed: true, confirmedDebtors, confirmedCreditors }))
+    const group = txs => { const g = {}; txs.forEach(t => { const k = t.entityName || 'Unknown'; (g[k] ||= { name: k, amount: 0 }).amount += t.amount }); return Object.values(g) }
+    const confirmedDebtors = group(bankData.credits).map((x, i) => ({ name: x.name, reference: `BANK-${String(i + 1).padStart(3, '0')}`, amount: Math.round(x.amount), days_overdue: 0, due_date: bankData.periodEnd, source: 'bank' }))
+    const confirmedCreditors = group(bankData.debits).map((x, i) => ({ name: x.name, supplier: x.name, ref: `BANK-${String(i + 1).padStart(3, '0')}`, amount: Math.round(x.amount), due: bankData.periodEnd, daysLeft: 0, overdue: false, source: 'bank' }))
+    const next = { ...bankData, isConfirmed: true, confirmedDebtors, confirmedCreditors }
+    const newMonthly = mergeMonthly(monthly ?? tenant.data.MONTHLY, buildMonthlyEntry(next))
+    setBankData(next); setMonthly(newMonthly); persist({ bank_data: next, monthly: newMonthly })
   }
+  function clearBankData() { setBankData(null); persist({ bank_data: null }) }
 
-  function clearBankData() {
-    setBankData(null)
-    localStorage.removeItem(`zeeder_bank_${activeTenantId}`)
-  }
-
-  async function deleteAccount() {
-    if (!currentUser) return
-    const { tenantId } = currentUser
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-    }
-    const updatedCustom = customTenants.filter(t => t.id !== tenantId)
-    setCustomTenants(updatedCustom)
-    localStorage.setItem('zeeder_custom_tenants', JSON.stringify(updatedCustom))
-    localStorage.removeItem(`zeeder_bank_${tenantId}`)
-    try {
-      const imp = JSON.parse(localStorage.getItem('zeeder_imported_data') || '{}')
-      delete imp[tenantId]
-      localStorage.setItem('zeeder_imported_data', JSON.stringify(imp))
-    } catch {
-      // best-effort cleanup — corrupted localStorage blob shouldn't block account deletion
-    }
-    await supabase.auth.signOut()
-    setCurrentUser(null)
-    localStorage.removeItem('zeeder_tenant')
-    setBankData(null)
-    setAdminUnlocked(false)
-  }
+  function switchTenant() { /* single workspace per account — cross-tenant switching removed */ }
+  function unlockAdmin(pin) { if (pin === ADMIN_PIN) { setAdminUnlocked(true); return true } return false }
+  function lockAdmin() { setAdminUnlocked(false) }
 
   return (
     <TenantContext.Provider value={{
-      tenant,
-      data:           mergedData,
-      systemPrompt:   tenant.systemPrompt,
-      tenants:        allTenants,
-      activeTenantId,
-      currentUser,
-      authLoading,
-      login,
-      logout,
-      registerAccount,
-      switchTenant,
-      adminUnlocked,
-      unlockAdmin,
-      lockAdmin,
-      bankData,
-      loadBankStatement,
-      updateEntityName,
-      confirmBankReconciliation,
-      clearBankData,
-      deleteAccount,
-      canDeleteAccount: customTenants.some(t => t.id === activeTenantId),
-      importDebtors,
-      importCreditors,
-      clearImportedDebtors,
-      clearImportedCreditors,
-      importedData,
-      simplePayKey: simplePayKeys[activeTenantId] || null,
-      connectSimplePay,
-      disconnectSimplePay,
+      tenant, data: mergedData, tenantError, systemPrompt: tenant?.systemPrompt || '',
+      tenants: tenant ? [tenant] : [], activeTenantId: tid, currentUser, authLoading, subscription,
+      login, logout, registerAccount, cancelSubscription, deleteAccount,
+      canDeleteAccount: !!tenant && !TENANTS.some(t => t.id === tenant.id),
+      switchTenant, adminUnlocked, unlockAdmin, lockAdmin,
+      bankData, loadBankStatement, updateEntityName, confirmBankReconciliation, clearBankData,
+      importDebtors: r => setImport('DEBTORS', r), importCreditors: r => setImport('CREDITORS', r),
+      clearImportedDebtors: () => clearImport('DEBTORS'), clearImportedCreditors: () => clearImport('CREDITORS'),
+      importedData: tid ? { [tid]: imported } : {},
+      simplePayConnected, connectSimplePay, disconnectSimplePay,
     }}>
       {children}
     </TenantContext.Provider>
@@ -470,116 +195,14 @@ export function useTenant() {
   return ctx
 }
 
-// ─── Admin Tenant Switcher Modal ────────────────────────────────────────────
-// Rendered by Sidebar — self-contained so Sidebar stays clean
 export function AdminSwitcher({ onClose }) {
-  const { tenant, tenants, activeTenantId, currentUser, switchTenant, adminUnlocked, unlockAdmin, lockAdmin } = useTenant()
-  const visibleTenants = tenants.filter(t => t.id === currentUser?.tenantId)
-  const [pin, setPin]       = useState('')
-  const [pinError, setPinError] = useState(false)
-
-  function handleUnlock() {
-    if (unlockAdmin(pin)) { setPin(''); setPinError(false) }
-    else { setPinError(true); setPin('') }
-  }
-
-  function handleSwitch(id) {
-    switchTenant(id)
-    onClose()
-  }
-
+  const { tenant } = useTenant()
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.65)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start',
-      }}>
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: 280, marginLeft: 10, marginBottom: 70,
-          background: '#0f1e35', border: `1px solid ${C.border}`,
-          borderRadius: 8, padding: '18px 20px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-        }}>
-
-        <div style={{ fontSize: 11, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>
-          Admin — Switch Tenant
-        </div>
-
-        {!adminUnlocked ? (
-          <>
-            <div style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>Enter admin PIN to continue</div>
-            <input
-              type="password"
-              maxLength={6}
-              value={pin}
-              onChange={e => { setPin(e.target.value); setPinError(false) }}
-              onKeyDown={e => e.key === 'Enter' && handleUnlock()}
-              placeholder="••••"
-              autoFocus
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 5,
-                border: `1px solid ${pinError ? C.danger : C.border}`,
-                background: '#0a1828', color: C.text,
-                fontSize: 18, letterSpacing: 6, textAlign: 'center',
-                outline: 'none', marginBottom: 10, boxSizing: 'border-box',
-                fontFamily: 'var(--mono)',
-              }}
-            />
-            {pinError && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8 }}>Incorrect PIN</div>}
-            <button
-              onClick={handleUnlock}
-              style={{
-                width: '100%', padding: '9px', borderRadius: 5,
-                border: `1px solid ${C.frank}30`, background: C.frankDim,
-                color: C.frank, fontSize: 12, cursor: 'pointer', fontWeight: 700, letterSpacing: 1,
-              }}>
-              Unlock
-            </button>
-          </>
-        ) : (
-          <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-              {visibleTenants.map(t => {
-                const active = t.id === activeTenantId
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => !active && handleSwitch(t.id)}
-                    style={{
-                      width: '100%', padding: '11px 14px', borderRadius: 6, textAlign: 'left',
-                      border: `1px solid ${active ? C.frank : C.border}`,
-                      background: active ? C.frankDim : 'transparent',
-                      cursor: active ? 'default' : 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 10,
-                    }}>
-                    <div style={{
-                      width: 8, height: 8, borderRadius: '50%',
-                      background: active ? C.frank : C.dim, flexShrink: 0,
-                    }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: active ? C.frank : C.text }}>{t.name}</div>
-                      <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{t.sector} · {t.plan} Plan</div>
-                    </div>
-                    {active && <span style={{ marginLeft: 'auto', fontSize: 10, color: C.frank, letterSpacing: 1 }}>ACTIVE</span>}
-                  </button>
-                )
-              })}
-            </div>
-            <button
-              onClick={() => { lockAdmin(); onClose() }}
-              style={{
-                width: '100%', padding: '8px', borderRadius: 5,
-                border: `1px solid ${C.border}`, background: 'transparent',
-                color: C.dim, fontSize: 11, cursor: 'pointer', letterSpacing: 1,
-              }}>
-              Lock Admin
-            </button>
-          </>
-        )}
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 280, margin: '0 0 70px 10px', background: '#0f1e35', border: `1px solid ${C.border}`, borderRadius: 8, padding: 18 }}>
+        <div style={{ fontSize: 13, color: C.text }}>{tenant?.name}</div>
+        <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>One workspace per account. Cross-tenant switching has been removed.</div>
+        <button onClick={onClose} style={{ marginTop: 12, padding: '8px 12px', background: 'transparent', border: `1px solid ${C.border}`, color: C.sub, borderRadius: 5, cursor: 'pointer' }}>Close</button>
       </div>
     </div>
   )

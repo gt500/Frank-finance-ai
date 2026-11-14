@@ -48,6 +48,7 @@ export const TENANTS = [
 
   {
     id:         'cape-fresh-grocery',
+    demo:       true,
     name:       'Cape Fresh Grocery',
     owner:      'Demo Admin',
     sector:     'Retail — Grocery',
@@ -81,6 +82,7 @@ STYLE: Plain English. Numbers first. One specific next action per response. 3–
     data: {
       BUSINESS: {
         id:         'cape-fresh-grocery',
+    demo:       true,
         name:       'Cape Fresh Grocery',
         owner:      'Demo Admin',
         sector:     'Retail — Grocery',

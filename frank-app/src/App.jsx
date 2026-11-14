@@ -9,8 +9,6 @@ import { Login } from './pages/Login'
 import { Onboarding } from './pages/Onboarding'
 import { BillingReturn } from './pages/BillingReturn'
 
-// Lazy-loaded: only one of these renders at a time (conditional on `view`),
-// so each becomes its own chunk instead of bloating the main bundle.
 const Dashboard      = lazy(() => import('./components/views/Dashboard').then(m => ({ default: m.Dashboard })))
 const CashFlow       = lazy(() => import('./components/views/CashFlow').then(m => ({ default: m.CashFlow })))
 const Reports        = lazy(() => import('./components/views/Reports').then(m => ({ default: m.Reports })))
@@ -23,25 +21,13 @@ const Reconciliation = lazy(() => import('./components/views/Reconciliation').th
 const Chat           = lazy(() => import('./components/views/Chat').then(m => ({ default: m.Chat })))
 
 const VIEW_LABELS = {
-  dashboard:  'Dashboard',
-  cashflow:   'Cash Flow',
-  reports:    'Reports',
-  health:     'Business Health',
-  documents:  'Upload Documents',
-  ar:         'Debtors',
-  ap:         'Creditors',
-  reconcile:  'Reconciliation',
-  connect:    'Connections',
-  chat:       'Ask Zeeder',
+  dashboard: 'Dashboard', cashflow: 'Cash Flow', reports: 'Reports', health: 'Business Health',
+  documents: 'Upload Documents', ar: 'Debtors', ap: 'Creditors', reconcile: 'Reconciliation',
+  connect: 'Connections', chat: 'Ask Zeeder',
 }
 
 export default function App() {
-  // PayGate does a full browser redirect here — it's not part of the
-  // in-app view state, so it's handled before the tenant/login gate.
-  if (window.location.pathname.startsWith('/billing/return')) {
-    return <BillingReturn />
-  }
-
+  if (window.location.pathname.startsWith('/billing/return')) return <BillingReturn />
   return (
     <TenantProvider>
       <AppContent />
@@ -51,71 +37,77 @@ export default function App() {
 
 function AppContent() {
   const {
-    tenant, systemPrompt, currentUser, authLoading, login, registerAccount,
-    simplePayKey, connectSimplePay, disconnectSimplePay,
+    tenant, data, tenantError, systemPrompt, currentUser, authLoading,
+    login, logout, registerAccount, bankData,
+    simplePayConnected, connectSimplePay, disconnectSimplePay,
   } = useTenant()
-  const [authMode, setAuthMode] = useState('login') // 'login' | 'onboarding'
+  const [authMode, setAuthMode] = useState('login')
   const [view, setView] = useState('dashboard')
 
-  // Wonderland Finance API is Wonderland-specific; other tenants get null.
-  // SimplePay is opt-in per tenant — enabled once they connect their own API key.
-  const isWonderland = tenant.id === 'wonderland-educare'
+  const isWonderland = tenant?.id === 'wonderland-educare'
   const { data: liveData, loading, error } = useWonderlandData(isWonderland)
-  const { data: payrollData, loading: payrollLoading, error: payrollError } = useSimplePayData(simplePayKey)
+  const { data: payrollData, loading: payrollLoading, error: payrollError } = useSimplePayData(simplePayConnected)
 
   const frank = useFrank([{
     role: 'assistant',
-    content: `Good morning. Here's your ${tenant.name} snapshot:\n\n**Cash: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.cash?.toLocaleString('en-ZA') ?? '—'}** · **Revenue: ${tenant.data.MONTHLY[tenant.data.MONTHLY.length - 1]?.rev?.toLocaleString('en-ZA') ?? '—'}/mo**\n\nAsk me anything about your finances.`,
+    content: "Good morning. I'm Zeeder — ask me anything about your cash flow, debtors, creditors or bills. I answer using your live workspace numbers.",
   }])
+
+  // P1-1: the AI now receives the real workspace numbers, not just metadata.
+  const latest = data?.MONTHLY?.[data.MONTHLY.length - 1] || {}
+  const debtors = data?.DEBTORS || []
+  const creditors = data?.CREDITORS || []
+  const arTotal = debtors.reduce((s, d) => s + (d.amount || 0), 0)
+  const apTotal = creditors.reduce((s, c) => s + (c.amount || 0), 0)
+  const aiContext = `${systemPrompt}
+
+CURRENT WORKSPACE NUMBERS (answer from these; if data is missing, say what to upload):
+- Cash: R ${latest.cash ?? 0} · Revenue this month: R ${latest.rev ?? 0} · Expenses: R ${latest.exp ?? 0} · Net: R ${latest.net ?? 0} (${latest.m ?? 'no month yet'})
+- Debtors: ${debtors.length} totalling R ${arTotal}
+- Creditors: ${creditors.length} totalling R ${apTotal}
+${bankData ? `- Latest bank statement: ${bankData.bankName} ${bankData.periodStart} to ${bankData.periodEnd}, closing balance R ${bankData.closingBalance}${bankData.isConfirmed ? ' (reconciled)' : ' (not yet confirmed)'}` : '- No bank statement loaded yet.'}
+Be concise. Numbers first. One specific next action per answer.`
 
   const goChat = useCallback((question) => {
     setView('chat')
-    if (question) {
-      setTimeout(() => frank.send(question, systemPrompt), 100)
-    }
-  }, [frank, systemPrompt])
+    if (question) setTimeout(() => frank.send(question, aiContext), 100)
+  }, [frank, aiContext])
 
   const viewProps = {
-    onAsk: goChat,
-    frank,
-    isWonderland,
-    liveData:     isWonderland ? liveData : null,
-    loading:      isWonderland ? loading  : false,
-    error:        isWonderland ? error    : null,
-    payrollData,
-    payrollLoading,
-    payrollError,
-    simplePayKey,
-    connectSimplePay,
-    disconnectSimplePay,
+    onAsk: goChat, frank, isWonderland,
+    liveData: isWonderland ? liveData : null,
+    loading: isWonderland ? loading : false,
+    error: isWonderland ? error : null,
+    payrollData, payrollLoading, payrollError,
+    simplePayConnected, connectSimplePay, disconnectSimplePay,
   }
 
-  if (authLoading) {
+  const spinner = (
+    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="blink" style={{ width: 10, height: 10, borderRadius: '50%', background: C.frank }} />
+    </div>
+  )
+
+  if (authLoading) return spinner
+  if (!currentUser) {
+    if (authMode === 'onboarding') return <Onboarding onComplete={(form) => registerAccount(form)} onBack={() => setAuthMode('login')} />
+    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} />
+  }
+  // P0-1: never fall back into another tenant's workspace.
+  if (tenantError) {
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="blink" style={{ width: 10, height: 10, borderRadius: '50%', background: C.frank }} />
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <div style={{ color: C.danger, fontSize: 15 }}>{tenantError}</div>
+        <button onClick={logout} style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${C.border}`, color: C.sub, borderRadius: 6, cursor: 'pointer' }}>Sign out</button>
       </div>
     )
   }
-
-  if (!currentUser) {
-    if (authMode === 'onboarding') {
-      return (
-        <Onboarding
-          onComplete={(form) => registerAccount(form)}
-          onBack={() => setAuthMode('login')}
-        />
-      )
-    }
-    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} />
-  }
+  if (!tenant || !data) return spinner
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
       <Sidebar view={view} onNav={setView} onAsk={goChat} />
-
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Top bar */}
         <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: C.bg }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: 0.5 }}>{VIEW_LABELS[view]}</div>
@@ -124,32 +116,22 @@ function AppContent() {
             </div>
           </div>
           <button onClick={() => goChat(`Give me a complete financial briefing for ${tenant.name} with cashflow risks and the 3 most urgent actions`)}
-            style={{
-              padding: '7px 16px', borderRadius: 4, border: `1px solid ${C.frank}30`,
-              background: C.frankDim, color: C.frank, cursor: 'pointer',
-              fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase',
-            }}>
+            style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${C.frank}30`, background: C.frankDim, color: C.frank, cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase' }}>
             ⚡ Full Briefing
           </button>
         </div>
-
-        {/* Page content */}
         <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
-          <Suspense fallback={
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <div className="blink" style={{ width: 10, height: 10, borderRadius: '50%', background: C.frank }} />
-            </div>
-          }>
-            {view === 'dashboard'  && <Dashboard     {...viewProps} />}
-            {view === 'cashflow'   && <CashFlow      {...viewProps} />}
-            {view === 'reports'    && <Reports       {...viewProps} />}
-            {view === 'health'     && <Health        {...viewProps} />}
-            {view === 'documents'  && <Documents     {...viewProps} onNav={setView} />}
-            {view === 'ar'         && <Debtors       {...viewProps} onNav={setView} />}
-            {view === 'ap'         && <Creditors     {...viewProps} onNav={setView} />}
+          <Suspense fallback={spinner}>
+            {view === 'dashboard'  && <Dashboard      {...viewProps} />}
+            {view === 'cashflow'   && <CashFlow       {...viewProps} />}
+            {view === 'reports'    && <Reports        {...viewProps} />}
+            {view === 'health'     && <Health         {...viewProps} />}
+            {view === 'documents'  && <Documents      {...viewProps} onNav={setView} />}
+            {view === 'ar'         && <Debtors        {...viewProps} onNav={setView} />}
+            {view === 'ap'         && <Creditors      {...viewProps} onNav={setView} />}
             {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
-            {view === 'connect'    && <Connections   {...viewProps} />}
-            {view === 'chat'       && <Chat          frank={frank} />}
+            {view === 'connect'    && <Connections    {...viewProps} />}
+            {view === 'chat'       && <Chat frank={frank} systemPrompt={aiContext} />}
           </Suspense>
         </div>
       </div>
