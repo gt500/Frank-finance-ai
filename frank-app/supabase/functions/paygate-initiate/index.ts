@@ -41,9 +41,13 @@ Deno.serve(async (req) => {
     const amountCents = PLANS[plan]
     if (!amountCents) return json({ error: `Unknown plan: ${plan}` }, 400)
 
-    const { data: existing } = await supabase.from("subscriptions").select("id").eq("tenant_id", profile.tenant_id).eq("status", "active").maybeSingle()
+    const { data: existing, error: existingErr } = await supabase.from("subscriptions").select("id").eq("tenant_id", profile.tenant_id).eq("status", "active").maybeSingle()
+    if (existingErr) throw existingErr
     if (existing) return json({ error: "You already have an active subscription." }, 409)
-    await supabase.from("subscriptions").update({ status: "cancelled" }).eq("tenant_id", profile.tenant_id).eq("status", "pending")
+    // An older checkout page may still be paid, so mark it superseded (paygate-notify can still
+    // settle it) rather than cancelled. The one-pending-per-tenant index blocks concurrent clicks.
+    const { error: supersedeErr } = await supabase.from("subscriptions").update({ status: "superseded" }).eq("tenant_id", profile.tenant_id).eq("status", "pending")
+    if (supersedeErr) throw supersedeErr
 
     const tenant_id = profile.tenant_id
     const email = profile.email
@@ -69,6 +73,8 @@ Deno.serve(async (req) => {
       pay_request_id: payRequestId,
       merchant_order_id: merchantOrderId,
     })
+    // 23505: another Upgrade click won the race. Its page is the live one; this one is never handed out.
+    if (error?.code === "23505") return json({ error: "A checkout is already in progress — please use the open payment page or try again." }, 409)
     if (error) throw error
 
     return json({ redirect_url: redirectUrl, pay_request_id: payRequestId })

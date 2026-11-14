@@ -123,15 +123,28 @@ export function TenantProvider({ children }) {
     return { ok: true, needsConfirmation: !data.session }
   }
 
+  // Calls an authed edge function; never throws — returns { ok, error } so the UI can always report it.
+  async function callFunction(name) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return { ok: false, error: 'Not signed in — please log in again.' }
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${name}`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
+      const out = await res.json().catch(() => ({}))
+      return { ok: res.ok, error: res.ok ? null : (out.error || `Request failed (${res.status})`) }
+    } catch (e) {
+      return { ok: false, error: `Network error: ${e.message}` }
+    }
+  }
   async function cancelSubscription() {
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-cancel`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
-    const out = await res.json(); if (res.ok) setSubscription(null); return { ok: res.ok, error: out.error }
+    const r = await callFunction('paygate-cancel')
+    if (r.ok) setSubscription(null)
+    return r
   }
   async function deleteAccount() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
+    const r = await callFunction('delete-account')
+    if (!r.ok) return r // account still exists — stay signed in and show the error
     await supabase.auth.signOut(); setCurrentUser(null); setTenant(null); setBankData(null); setSubscription(null)
+    return r
   }
 
   function loadBankStatement(extractedData) {

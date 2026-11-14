@@ -22,13 +22,22 @@ Deno.serve(async (req) => {
 
   const userId = userData.user.id
 
-  const { data: profile } = await admin.from("profiles").select("tenant_id").eq("id", userId).single()
+  // Every cleanup step must succeed before the auth user goes: a deleted user whose
+  // subscription is still active would keep being charged with no way to cancel.
+  const { data: profile, error: profileErr } = await admin.from("profiles").select("tenant_id").eq("id", userId).maybeSingle()
+  if (profileErr) return fail("profile lookup", profileErr)
   if (profile?.tenant_id) {
     const tid = profile.tenant_id
-    await admin.from("subscriptions").update({ status: "cancelled", next_charge_at: null }).eq("tenant_id", tid).in("status", ["active", "pending"])
-    await admin.from("tenant_data").delete().eq("tenant_id", tid)
-    await admin.from("tenant_secrets").delete().eq("tenant_id", tid)
-    await admin.from("tenants").delete().eq("id", tid)
+    const steps: [string, PromiseLike<{ error: unknown }>][] = [
+      ["stop billing", admin.from("subscriptions").update({ status: "cancelled", next_charge_at: null }).eq("tenant_id", tid).in("status", ["active", "pending", "superseded"])],
+      ["delete tenant_data", admin.from("tenant_data").delete().eq("tenant_id", tid)],
+      ["delete tenant_secrets", admin.from("tenant_secrets").delete().eq("tenant_id", tid)],
+      ["delete tenants", admin.from("tenants").delete().eq("id", tid)],
+    ]
+    for (const [step, query] of steps) {
+      const { error } = await query
+      if (error) return fail(step, error)
+    }
   }
 
   // Clean up owned rows first — profiles cascades on auth.users delete, but
@@ -40,6 +49,11 @@ Deno.serve(async (req) => {
 
   return json({ deleted: true })
 })
+
+function fail(step: string, error: unknown) {
+  console.error(`delete-account: ${step} failed — account NOT deleted`, error)
+  return json({ error: "Could not delete your account right now — it is still active. Please try again." }, 500)
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

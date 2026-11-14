@@ -10,10 +10,16 @@ Deno.serve(async (req) => {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
   const { data: u, error } = await admin.auth.getUser(token)
   if (error || !u?.user) return json({ error: "Invalid session" }, 401)
-  const { data: p } = await admin.from("profiles").select("tenant_id").eq("id", u.user.id).single()
+  const { data: p, error: pErr } = await admin.from("profiles").select("tenant_id").eq("id", u.user.id).maybeSingle()
+  if (pErr) { console.error("paygate-cancel: profile lookup failed", pErr); return json({ error: "Could not cancel right now — please try again." }, 500) }
   if (!p) return json({ error: "No profile" }, 404)
-  const { error: upErr } = await admin.from("subscriptions").update({ status: "cancelled", next_charge_at: null }).eq("tenant_id", p.tenant_id).eq("status", "active")
-  if (upErr) return json({ error: upErr.message }, 500)
+  // 'cancelled' is final: paygate-notify never reactivates it. Open checkouts are closed too.
+  const { data: rows, error: upErr } = await admin.from("subscriptions")
+    .update({ status: "cancelled", next_charge_at: null })
+    .eq("tenant_id", p.tenant_id).in("status", ["active", "pending", "superseded"])
+    .select("id")
+  if (upErr) { console.error("paygate-cancel: update failed", upErr); return json({ error: "Could not cancel right now — please try again." }, 500) }
+  if (!rows?.length) return json({ error: "No active subscription to cancel." }, 404)
   return json({ cancelled: true })
 })
 function json(b: unknown, s = 200) { return new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json", ...corsHeaders } }) }

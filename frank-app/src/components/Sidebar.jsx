@@ -88,7 +88,7 @@ export function Sidebar({ view, onNav, onAsk }) {
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
                 <button onClick={logout} title="Sign out" style={{ padding: '4px 9px', borderRadius: 3, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer', letterSpacing: 0.5 }}>Sign out</button>
                 {canDeleteAccount && (
-                  <button onClick={() => { if (window.confirm('Delete your account and all data? This cannot be undone.')) deleteAccount() }} title="Delete account"
+                  <button onClick={async () => { if (window.confirm('Delete your account and all data? This cannot be undone.')) { const r = await deleteAccount(); if (!r.ok) window.alert(`Account not deleted: ${r.error}`) } }} title="Delete account"
                     style={{ padding: '4px 7px', borderRadius: 3, border: `1px solid ${C.danger}30`, background: 'transparent', color: C.danger, fontSize: 11, cursor: 'pointer' }}>×</button>
                 )}
               </div>
