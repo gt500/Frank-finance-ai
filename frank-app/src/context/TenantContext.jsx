@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react'
 import { TENANTS } from '../data/tenants'
 import { C } from '../lib/theme'
 import { supabase } from '../lib/supabaseClient'
 import { simplePayApi } from '../lib/simplePayApi'
 import { buildMonthlyEntry, mergeMonthly, removeMonthly } from '../lib/monthlyHistory'
+import { createSaveQueue } from '../lib/saveQueue'
 
 const TenantContext = createContext(null)
 const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN
@@ -51,24 +52,38 @@ export function TenantProvider({ children }) {
   function resetWorkspace() {
     wsReadyRef.current = false
     loadedUserRef.current = null
+    saveTidRef.current = null
+    saveQueueRef.current?.reset()
     setCurrentUser(null); setTenant(null); setSubscription(null); setSimplePayConnected(false)
     setSaveError(null); setAdminUnlocked(false)
     applyBankData(null); applyImported({}); applyMonthly(null)
   }
 
-  // Cloud persistence (P0-3). Demo tenant = in-memory only. Failures surface via saveError.
-  const persist = useCallback(async (patch) => {
-    if (!tid || tenant?.demo || !wsReadyRef.current) return
-    try {
+  // Cloud persistence (P0-3) through an ordered, self-healing queue: saves never land out of order,
+  // and a failed save is resent with the next one. Demo tenant = in-memory only (saveTidRef stays null).
+  const saveTidRef = useRef(null)
+  const saveQueueRef = useRef(null)
+  if (!saveQueueRef.current) {
+    saveQueueRef.current = createSaveQueue(async (batch) => {
       const { error } = await supabase.from('tenant_data')
-        .upsert({ tenant_id: tid, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
+        .upsert({ tenant_id: saveTidRef.current, ...batch, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
       if (error) throw error
-      setSaveError(null)
-    } catch (e) {
-      console.error('Save failed:', e.message)
-      setSaveError('Your last change was not saved — check your connection and try again.')
-    }
-  }, [tid, tenant])
+    }, (err) => {
+      if (err) console.error('Save failed:', err.message)
+      setSaveError(err ? 'Your latest changes are not saved yet — they will be resent automatically.' : null)
+    })
+  }
+  function persist(patch) {
+    if (!saveTidRef.current || !wsReadyRef.current) return
+    saveQueueRef.current.push(patch)
+  }
+
+  // Closing the tab mid-save would lose the change: let the browser warn first.
+  useEffect(() => {
+    const warn = (e) => { if (saveQueueRef.current.hasPending()) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [])
 
   async function loadWorkspace(profile, isStale) {
     // Static demo definitions live in code; custom tenants live in the DB. No fallback to TENANTS[0].
@@ -94,6 +109,7 @@ export function TenantProvider({ children }) {
     setSimplePayConnected(!!stored?.simplepay_connected)
     setSubscription(sub || null)
     setTenant(t)
+    saveTidRef.current = t.demo ? null : profile.tenant_id
     wsReadyRef.current = true
   }
 
@@ -114,7 +130,7 @@ export function TenantProvider({ children }) {
       LEGACY_KEYS.forEach(k => localStorage.removeItem(k))
       Object.keys(localStorage).filter(k => k.startsWith('zeeder_bank_')).forEach(k => localStorage.removeItem(k))
       const trialDaysLeft = Math.max(0, 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / 86400000))
-      setCurrentUser({ email: profile.email, name: profile.name, tenantId: profile.tenant_id, trialDaysLeft })
+      setCurrentUser({ id: session.user.id, email: profile.email, name: profile.name, tenantId: profile.tenant_id, trialDaysLeft })
       await loadWorkspace(profile, isStale)
       // Only a fully successful load counts as "loaded": after an error, the next auth event retries.
       if (!isStale() && wsReadyRef.current) loadedUserRef.current = session.user.id
@@ -171,7 +187,11 @@ export function TenantProvider({ children }) {
     if (error) { const n = loginAttempts.count + 1; setLoginAttempts(n >= 5 ? { count: 0, lockedUntil: now + 30000 } : { count: n, lockedUntil: 0 }); return { ok: false, error: 'Invalid email or password' } }
     setLoginAttempts({ count: 0, lockedUntil: 0 }); return { ok: true }
   }
-  async function logout() { await supabase.auth.signOut(); resetWorkspace(); setTenantError(null) }
+  async function logout() {
+    // Give unsaved changes one last chance before the queue is dropped.
+    if (saveQueueRef.current.hasPending()) await saveQueueRef.current.retry()
+    await supabase.auth.signOut(); resetWorkspace(); setTenantError(null)
+  }
   async function registerAccount(form) {
     // Profile + tenant are created server-side by the handle_new_user trigger.
     const { data, error } = await supabase.auth.signUp({
@@ -250,7 +270,7 @@ export function TenantProvider({ children }) {
 
   return (
     <TenantContext.Provider value={{
-      tenant, data: mergedData, tenantError, saveError, systemPrompt: tenant?.systemPrompt || '',
+      tenant, data: mergedData, tenantError, saveError, retrySave: () => saveQueueRef.current.retry(), systemPrompt: tenant?.systemPrompt || '',
       tenants: tenant ? [tenant] : [], activeTenantId: tid, currentUser, authLoading, subscription,
       login, logout, registerAccount, cancelSubscription, deleteAccount,
       canDeleteAccount: !!tenant && !TENANTS.some(t => t.id === tenant.id),

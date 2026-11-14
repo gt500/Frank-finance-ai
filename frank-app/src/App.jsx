@@ -1,4 +1,4 @@
-import { useState, useCallback, lazy, Suspense } from 'react'
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { useFrank } from './hooks/useFrank'
 import { useWonderlandData } from './hooks/useWonderlandData'
@@ -41,14 +41,24 @@ function AppContent() {
   return <AppShell key={currentUser?.email ?? 'signed-out'} />
 }
 
+// Last screen per user, so coming back resumes where they left off. Only a view name — never data.
+const lastViewKey = (user) => `zeeder_last_view_${user.id}`
+function readLastView(user) {
+  try { const v = user && localStorage.getItem(lastViewKey(user)); return v && VIEW_LABELS[v] ? v : 'dashboard' } catch { return 'dashboard' }
+}
+
 function AppShell() {
   const {
-    tenant, data, tenantError, saveError, systemPrompt, currentUser, authLoading,
+    tenant, data, tenantError, saveError, retrySave, systemPrompt, currentUser, authLoading,
     login, logout, registerAccount, bankData,
     simplePayConnected, connectSimplePay, disconnectSimplePay,
   } = useTenant()
   const [authMode, setAuthMode] = useState('login')
-  const [view, setView] = useState('dashboard')
+  const [view, setView] = useState(() => readLastView(currentUser))
+  useEffect(() => {
+    if (!currentUser) return
+    try { localStorage.setItem(lastViewKey(currentUser), view) } catch { /* private mode: resume is best-effort */ }
+  }, [view, currentUser])
 
   const isWonderland = tenant?.id === 'wonderland-educare'
   const { data: liveData, loading, error } = useWonderlandData(isWonderland)
@@ -128,7 +138,10 @@ Be concise. Numbers first. One specific next action per answer.`
           </button>
         </div>
         {saveError && (
-          <div role="alert" style={{ padding: '8px 24px', background: `${C.danger}18`, borderBottom: `1px solid ${C.danger}40`, color: C.danger, fontSize: 13 }}>{saveError}</div>
+          <div role="alert" style={{ padding: '8px 24px', background: `${C.danger}18`, borderBottom: `1px solid ${C.danger}40`, color: C.danger, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span>{saveError}</span>
+            <button onClick={retrySave} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${C.danger}60`, background: 'transparent', color: C.danger, fontSize: 12, cursor: 'pointer' }}>Retry now</button>
+          </div>
         )}
         <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
           <Suspense fallback={spinner}>
