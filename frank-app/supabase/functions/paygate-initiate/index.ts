@@ -14,6 +14,7 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const APP_URL = Deno.env.get("APP_URL")! // e.g. https://app.zeederfinance.co.za
 
 const PLANS: Record<string, number> = {
+  starter: 49900, // R499.00 in cents
   growth: 99900, // R999.00 in cents
 }
 
@@ -39,6 +40,10 @@ Deno.serve(async (req) => {
     const { plan, first_name, last_name } = await req.json()
     const amountCents = PLANS[plan]
     if (!amountCents) return json({ error: `Unknown plan: ${plan}` }, 400)
+
+    const { data: existing } = await supabase.from("subscriptions").select("id").eq("tenant_id", profile.tenant_id).eq("status", "active").maybeSingle()
+    if (existing) return json({ error: "You already have an active subscription." }, 409)
+    await supabase.from("subscriptions").update({ status: "cancelled" }).eq("tenant_id", profile.tenant_id).eq("status", "pending")
 
     const tenant_id = profile.tenant_id
     const email = profile.email

@@ -21,8 +21,13 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await admin.auth.getUser(token)
   if (userErr || !userData?.user) return json({ error: "Invalid session" }, 401)
 
+  const { checkEntitlement } = await import("../_shared/entitlement.ts")
+  const ent = await checkEntitlement(userData.user.id)
+  if (!ent.ok) return json({ error: ent.reason }, 402)
+
   try {
     const { system, messages } = await req.json()
+    const msgs = Array.isArray(messages) ? messages.slice(-20) : messages
     if (!Array.isArray(messages) || messages.length === 0) {
       return json({ error: "messages array required" }, 400)
     }
@@ -39,7 +44,7 @@ Deno.serve(async (req) => {
           model: "claude-sonnet-4-6",
           max_tokens: 1000,
           system,
-          messages,
+          messages: msgs,
         }),
       })
 

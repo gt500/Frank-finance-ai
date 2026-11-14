@@ -22,6 +22,15 @@ Deno.serve(async (req) => {
 
   const userId = userData.user.id
 
+  const { data: profile } = await admin.from("profiles").select("tenant_id").eq("id", userId).single()
+  if (profile?.tenant_id) {
+    const tid = profile.tenant_id
+    await admin.from("subscriptions").update({ status: "cancelled", next_charge_at: null }).eq("tenant_id", tid).in("status", ["active", "pending"])
+    await admin.from("tenant_data").delete().eq("tenant_id", tid)
+    await admin.from("tenant_secrets").delete().eq("tenant_id", tid)
+    await admin.from("tenants").delete().eq("id", tid)
+  }
+
   // Clean up owned rows first — profiles cascades on auth.users delete, but
   // subscriptions/billing_notifications reference tenant_id, not user id,
   // so they're left alone intentionally (billing history should outlive an

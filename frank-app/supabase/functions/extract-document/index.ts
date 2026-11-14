@@ -21,6 +21,10 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await admin.auth.getUser(token)
   if (userErr || !userData?.user) return json({ error: "Invalid session" }, 401)
 
+  const { checkEntitlement } = await import("../_shared/entitlement.ts")
+  const ent = await checkEntitlement(userData.user.id)
+  if (!ent.ok) return json({ error: ent.reason }, 402)
+
   try {
     // messageContent is whatever useFrank.js already built (string, or the
     // Anthropic content-block array for images/PDFs) — this function is a

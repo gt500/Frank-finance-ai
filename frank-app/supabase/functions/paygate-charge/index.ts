@@ -11,6 +11,10 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 })
+  const cronToken = (req.headers.get("Authorization") ?? "").replace("Bearer ", "")
+  let cronRole = ""
+  try { cronRole = JSON.parse(atob(cronToken.split(".")[1] ?? "")).role ?? "" } catch { /* ignore */ }
+  if (cronRole !== "service_role") return json({ error: "Forbidden" }, 403)
 
   try {
     const { subscription_id } = await req.json()
