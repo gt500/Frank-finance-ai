@@ -9,7 +9,12 @@ export function buildMonthlyEntry(bankData) {
 }
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const monthNum = m => MONTHS.indexOf(String(m).slice(0, 3))
+const withoutMonth = (history, entry) => (history || []).filter(h => !(h.m === entry.m && (h.y ?? null) === (entry.y ?? null)))
 export function mergeMonthly(history, entry) {
-  const rest = (history || []).filter(h => !(h.m === entry.m && (h.y ?? null) === (entry.y ?? null)))
-  return [...rest, entry].sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || monthNum(a.m) - monthNum(b.m))
+  return [...withoutMonth(history, entry), entry].sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || monthNum(a.m) - monthNum(b.m))
+}
+/** Drop the month a (cleared) bank statement contributed. Returns null when no months remain. */
+export function removeMonthly(history, bankData) {
+  const rest = withoutMonth(history, buildMonthlyEntry(bankData))
+  return rest.length ? rest : null
 }

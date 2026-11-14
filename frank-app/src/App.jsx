@@ -36,8 +36,14 @@ export default function App() {
 }
 
 function AppContent() {
+  const { currentUser } = useTenant()
+  // A different user gets a fresh tree: chat history, view and data hooks never carry over between accounts.
+  return <AppShell key={currentUser?.email ?? 'signed-out'} />
+}
+
+function AppShell() {
   const {
-    tenant, data, tenantError, systemPrompt, currentUser, authLoading,
+    tenant, data, tenantError, saveError, systemPrompt, currentUser, authLoading,
     login, logout, registerAccount, bankData,
     simplePayConnected, connectSimplePay, disconnectSimplePay,
   } = useTenant()
@@ -89,11 +95,8 @@ Be concise. Numbers first. One specific next action per answer.`
   )
 
   if (authLoading) return spinner
-  if (!currentUser) {
-    if (authMode === 'onboarding') return <Onboarding onComplete={(form) => registerAccount(form)} onBack={() => setAuthMode('login')} />
-    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} />
-  }
-  // P0-1: never fall back into another tenant's workspace.
+  // P0-1: never fall back into another tenant's workspace. Checked before Login so a signed-in
+  // user whose profile/workspace failed to load sees why (and can sign out) instead of a Login loop.
   if (tenantError) {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
@@ -101,6 +104,10 @@ Be concise. Numbers first. One specific next action per answer.`
         <button onClick={logout} style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${C.border}`, color: C.sub, borderRadius: 6, cursor: 'pointer' }}>Sign out</button>
       </div>
     )
+  }
+  if (!currentUser) {
+    if (authMode === 'onboarding') return <Onboarding onComplete={(form) => registerAccount(form)} onBack={() => setAuthMode('login')} />
+    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} />
   }
   if (!tenant || !data) return spinner
 
@@ -120,6 +127,9 @@ Be concise. Numbers first. One specific next action per answer.`
             ⚡ Full Briefing
           </button>
         </div>
+        {saveError && (
+          <div role="alert" style={{ padding: '8px 24px', background: `${C.danger}18`, borderBottom: `1px solid ${C.danger}40`, color: C.danger, fontSize: 13 }}>{saveError}</div>
+        )}
         <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
           <Suspense fallback={spinner}>
             {view === 'dashboard'  && <Dashboard      {...viewProps} />}

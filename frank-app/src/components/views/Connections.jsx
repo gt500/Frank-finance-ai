@@ -91,7 +91,8 @@ function SimplePayCard({ payrollData, payrollLoading, payrollError, simplePayCon
           </Detail>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <AskButton onAsk={onAsk} askQ={payrollOk ? 'Summarise the payroll data — headcount, total salary cost, and next pay date' : null} />
-            <button onClick={disconnectSimplePay} style={{ marginTop: 4, padding: '5px 12px', borderRadius: 4, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>Disconnect</button>
+            {formError && <span style={{ fontSize: 11, color: C.warn }}>{formError}</span>}
+            <button onClick={async () => { setFormError(null); const r = await disconnectSimplePay(); if (!r.ok) setFormError(r.error) }} style={{ marginTop: 4, padding: '5px 12px', borderRadius: 4, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>Disconnect</button>
           </div>
         </>
       ) : (

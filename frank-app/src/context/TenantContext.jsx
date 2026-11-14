@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { TENANTS } from '../data/tenants'
 import { C } from '../lib/theme'
 import { supabase } from '../lib/supabaseClient'
 import { simplePayApi } from '../lib/simplePayApi'
-import { buildMonthlyEntry, mergeMonthly } from '../lib/monthlyHistory'
+import { buildMonthlyEntry, mergeMonthly, removeMonthly } from '../lib/monthlyHistory'
 
 const TenantContext = createContext(null)
 const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN
@@ -33,54 +33,108 @@ export function TenantProvider({ children }) {
   const [subscription, setSubscription] = useState(null)
   const [adminUnlocked, setAdminUnlocked] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState({ count: 0, lockedUntil: 0 })
+  const [saveError, setSaveError] = useState(null)
   const tid = currentUser?.tenantId
 
-  // Cloud persistence (P0-3). Demo tenant = in-memory only.
-  const persist = useCallback((patch) => {
-    if (!tid || tenant?.demo) return
-    supabase.from('tenant_data')
-      .upsert({ tenant_id: tid, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
-      .then(({ error }) => { if (error) console.error('Save failed:', error.message) })
+  // Refs mirror the latest values so rapid edits never build on a stale render's copy.
+  const importedRef = useRef({})
+  const bankDataRef = useRef(null)
+  const monthlyRef = useRef(null)
+  const wsReadyRef = useRef(false)      // false until a workspace load fully succeeds — no saves before that
+  const loadedUserRef = useRef(null)    // user whose workspace is loaded; skips token-refresh re-fires
+  const loadSeqRef = useRef(0)          // only the newest auth event may apply its results
+
+  const applyImported = (v) => { importedRef.current = v; setImported(v) }
+  const applyBankData = (v) => { bankDataRef.current = v; setBankData(v) }
+  const applyMonthly = (v) => { monthlyRef.current = v; setMonthly(v) }
+
+  function resetWorkspace() {
+    wsReadyRef.current = false
+    loadedUserRef.current = null
+    setCurrentUser(null); setTenant(null); setSubscription(null); setSimplePayConnected(false)
+    setSaveError(null); setAdminUnlocked(false)
+    applyBankData(null); applyImported({}); applyMonthly(null)
+  }
+
+  // Cloud persistence (P0-3). Demo tenant = in-memory only. Failures surface via saveError.
+  const persist = useCallback(async (patch) => {
+    if (!tid || tenant?.demo || !wsReadyRef.current) return
+    try {
+      const { error } = await supabase.from('tenant_data')
+        .upsert({ tenant_id: tid, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
+      if (error) throw error
+      setSaveError(null)
+    } catch (e) {
+      console.error('Save failed:', e.message)
+      setSaveError('Your last change was not saved — check your connection and try again.')
+    }
   }, [tid, tenant])
 
-  async function loadWorkspace(profile) {
-    setTenantError(null)
+  async function loadWorkspace(profile, isStale) {
     // Static demo definitions live in code; custom tenants live in the DB. No fallback to TENANTS[0].
     let t = TENANTS.find(x => x.id === profile.tenant_id) || null
     if (!t) {
-      const { data } = await supabase.from('tenants').select('profile').eq('id', profile.tenant_id).maybeSingle()
+      const { data, error } = await supabase.from('tenants').select('profile').eq('id', profile.tenant_id).maybeSingle()
+      if (isStale()) return
+      if (error) { setTenantError('Could not load your workspace — please refresh.'); return }
       t = data?.profile || null
     }
     if (!t) { setTenant(null); setTenantError('Workspace not found for this account. Contact support.'); return }
-    setTenant(t)
-    const { data: td } = await supabase.from('tenant_data').select('*').eq('tenant_id', profile.tenant_id).maybeSingle()
+    const [{ data: td, error: tdErr }, { data: sub, error: subErr }] = await Promise.all([
+      supabase.from('tenant_data').select('*').eq('tenant_id', profile.tenant_id).maybeSingle(),
+      supabase.from('subscriptions').select('status, plan, amount_cents').eq('tenant_id', profile.tenant_id).eq('status', 'active').limit(1).maybeSingle(),
+    ])
+    if (isStale()) return
+    // A failed read must never be treated as "empty" — the next save would overwrite real data.
+    if (tdErr || subErr) { setTenantError('Could not load your workspace data — please refresh.'); return }
     const stored = t.demo ? null : td
-    setBankData(stored?.bank_data || null)
-    setImported(stored?.imported || {})
-    setMonthly(stored?.monthly || null)
+    applyBankData(stored?.bank_data || null)
+    applyImported(stored?.imported || {})
+    applyMonthly(stored?.monthly || null)
     setSimplePayConnected(!!stored?.simplepay_connected)
-    const { data: sub } = await supabase.from('subscriptions').select('status, plan, amount_cents')
-      .eq('tenant_id', profile.tenant_id).eq('status', 'active').limit(1).maybeSingle()
     setSubscription(sub || null)
+    setTenant(t)
+    wsReadyRef.current = true
   }
 
   async function loadProfileForSession(session) {
-    if (!session?.user) { setCurrentUser(null); setTenant(null); return }
-    const { data: profile, error } = await supabase.from('profiles')
-      .select('email, name, tenant_id, created_at').eq('id', session.user.id).single()
-    if (error || !profile) { setCurrentUser(null); setTenantError('No profile for this account.'); return }
-    // One-time purge of legacy browser storage (old cross-tenant leak vector).
-    LEGACY_KEYS.forEach(k => localStorage.removeItem(k))
-    Object.keys(localStorage).filter(k => k.startsWith('zeeder_bank_')).forEach(k => localStorage.removeItem(k))
-    const trialDaysLeft = Math.max(0, 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / 86400000))
-    setCurrentUser({ email: profile.email, name: profile.name, tenantId: profile.tenant_id, trialDaysLeft })
-    await loadWorkspace(profile)
+    // Token refresh / tab refocus for a fully loaded user: keep local state. Checked BEFORE taking a
+    // sequence number, so it can never invalidate a load that is still in flight.
+    if (session?.user && loadedUserRef.current === session.user.id) return
+    const seq = ++loadSeqRef.current
+    const isStale = () => seq !== loadSeqRef.current
+    try {
+      resetWorkspace(); setTenantError(null)
+      if (!session?.user) return
+      const { data: profile, error } = await supabase.from('profiles')
+        .select('email, name, tenant_id, created_at').eq('id', session.user.id).maybeSingle()
+      if (isStale()) return
+      if (error || !profile) { setTenantError(error ? 'Could not load your account — please refresh.' : 'No profile for this account. Contact support.'); return }
+      // One-time purge of legacy browser storage (old cross-tenant leak vector).
+      LEGACY_KEYS.forEach(k => localStorage.removeItem(k))
+      Object.keys(localStorage).filter(k => k.startsWith('zeeder_bank_')).forEach(k => localStorage.removeItem(k))
+      const trialDaysLeft = Math.max(0, 14 - Math.floor((Date.now() - new Date(profile.created_at).getTime()) / 86400000))
+      setCurrentUser({ email: profile.email, name: profile.name, tenantId: profile.tenant_id, trialDaysLeft })
+      await loadWorkspace(profile, isStale)
+      // Only a fully successful load counts as "loaded": after an error, the next auth event retries.
+      if (!isStale() && wsReadyRef.current) loadedUserRef.current = session.user.id
+    } catch (e) {
+      console.error('Workspace load failed:', e)
+      if (!isStale()) setTenantError('Could not load your workspace — please refresh.')
+    } finally {
+      if (!isStale()) setAuthLoading(false)
+    }
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { loadProfileForSession(session).finally(() => setAuthLoading(false)) })
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => { loadProfileForSession(session) })
+    // INITIAL_SESSION fires on subscribe, so this one listener covers page load too.
+    // Supabase calls are deferred out of the callback (awaiting them inside it can deadlock auth-js).
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+      setTimeout(() => { loadProfileForSession(session) }, 0)
+    })
     return () => listener.subscription.unsubscribe()
+    // loadProfileForSession only touches state setters and refs, so the first render's copy is safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const mergedData = useMemo(() => {
@@ -91,8 +145,8 @@ export function TenantProvider({ children }) {
       CREDITORS: imported.CREDITORS ?? tenant.data.CREDITORS }
   }, [tenant, monthly, imported])
 
-  function setImport(kind, rows) { const next = { ...imported, [kind]: rows }; setImported(next); persist({ imported: next }) }
-  function clearImport(kind) { const next = { ...imported }; delete next[kind]; setImported(next); persist({ imported: next }) }
+  function setImport(kind, rows) { const next = { ...importedRef.current, [kind]: rows }; applyImported(next); persist({ imported: next }) }
+  function clearImport(kind) { const next = Object.fromEntries(Object.entries(importedRef.current).filter(([k]) => k !== kind)); applyImported(next); persist({ imported: next }) }
 
   // SimplePay via server-side proxy — the key never lives in the browser.
   async function connectSimplePay(apiKey, clientId) {
@@ -101,8 +155,13 @@ export function TenantProvider({ children }) {
     return r
   }
   async function disconnectSimplePay() {
-    try { await simplePayApi.disconnect() } catch (e) { console.error(e.message) }
-    setSimplePayConnected(false)
+    try {
+      await simplePayApi.disconnect()
+      setSimplePayConnected(false)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: `Disconnect failed — your key is still stored: ${e.message}` }
+    }
   }
 
   async function login(email, password) {
@@ -112,7 +171,7 @@ export function TenantProvider({ children }) {
     if (error) { const n = loginAttempts.count + 1; setLoginAttempts(n >= 5 ? { count: 0, lockedUntil: now + 30000 } : { count: n, lockedUntil: 0 }); return { ok: false, error: 'Invalid email or password' } }
     setLoginAttempts({ count: 0, lockedUntil: 0 }); return { ok: true }
   }
-  async function logout() { await supabase.auth.signOut(); setCurrentUser(null); setTenant(null); setBankData(null); setSubscription(null); setAdminUnlocked(false) }
+  async function logout() { await supabase.auth.signOut(); resetWorkspace(); setTenantError(null) }
   async function registerAccount(form) {
     // Profile + tenant are created server-side by the handle_new_user trigger.
     const { data, error } = await supabase.auth.signUp({
@@ -143,7 +202,7 @@ export function TenantProvider({ children }) {
   async function deleteAccount() {
     const r = await callFunction('delete-account')
     if (!r.ok) return r // account still exists — stay signed in and show the error
-    await supabase.auth.signOut(); setCurrentUser(null); setTenant(null); setBankData(null); setSubscription(null)
+    await supabase.auth.signOut(); resetWorkspace()
     return r
   }
 
@@ -159,26 +218,31 @@ export function TenantProvider({ children }) {
       credits: transactions.filter(t => (t.credit || 0) > 0).map((t, i) => map(t, i, t.credit, 'cr')),
       debits: transactions.filter(t => (t.debit || 0) > 0).map((t, i) => map(t, i, t.debit, 'db')),
       isConfirmed: false, confirmedDebtors: null, confirmedCreditors: null }
-    setBankData(next); persist({ bank_data: next })
+    applyBankData(next); persist({ bank_data: next })
   }
   function updateEntityName(type, id, newName) {
-    setBankData(prev => {
-      if (!prev) return prev
-      const key = type === 'credit' ? 'credits' : 'debits'
-      const next = { ...prev, [key]: prev[key].map(t => t.id === id ? { ...t, entityName: newName, confirmed: true } : t) }
-      persist({ bank_data: next }); return next
-    })
+    const prev = bankDataRef.current
+    if (!prev) return
+    const key = type === 'credit' ? 'credits' : 'debits'
+    const next = { ...prev, [key]: prev[key].map(t => t.id === id ? { ...t, entityName: newName, confirmed: true } : t) }
+    applyBankData(next); persist({ bank_data: next })
   }
   function confirmBankReconciliation() {
+    const bankData = bankDataRef.current
     if (!bankData) return
     const group = txs => { const g = {}; txs.forEach(t => { const k = t.entityName || 'Unknown'; (g[k] ||= { name: k, amount: 0 }).amount += t.amount }); return Object.values(g) }
     const confirmedDebtors = group(bankData.credits).map((x, i) => ({ name: x.name, reference: `BANK-${String(i + 1).padStart(3, '0')}`, amount: Math.round(x.amount), days_overdue: 0, due_date: bankData.periodEnd, source: 'bank' }))
     const confirmedCreditors = group(bankData.debits).map((x, i) => ({ name: x.name, supplier: x.name, ref: `BANK-${String(i + 1).padStart(3, '0')}`, amount: Math.round(x.amount), due: bankData.periodEnd, daysLeft: 0, overdue: false, source: 'bank' }))
     const next = { ...bankData, isConfirmed: true, confirmedDebtors, confirmedCreditors }
-    const newMonthly = mergeMonthly(monthly ?? tenant.data.MONTHLY, buildMonthlyEntry(next))
-    setBankData(next); setMonthly(newMonthly); persist({ bank_data: next, monthly: newMonthly })
+    const newMonthly = mergeMonthly(monthlyRef.current ?? tenant.data.MONTHLY, buildMonthlyEntry(next))
+    applyBankData(next); applyMonthly(newMonthly); persist({ bank_data: next, monthly: newMonthly })
   }
-  function clearBankData() { setBankData(null); persist({ bank_data: null }) }
+  function clearBankData() {
+    const cleared = bankDataRef.current
+    // A confirmed statement also wrote its month into the history — take that back out too.
+    const newMonthly = cleared?.isConfirmed ? removeMonthly(monthlyRef.current, cleared) : monthlyRef.current
+    applyBankData(null); applyMonthly(newMonthly); persist({ bank_data: null, monthly: newMonthly })
+  }
 
   function switchTenant() { /* single workspace per account — cross-tenant switching removed */ }
   function unlockAdmin(pin) { if (pin === ADMIN_PIN) { setAdminUnlocked(true); return true } return false }
@@ -186,7 +250,7 @@ export function TenantProvider({ children }) {
 
   return (
     <TenantContext.Provider value={{
-      tenant, data: mergedData, tenantError, systemPrompt: tenant?.systemPrompt || '',
+      tenant, data: mergedData, tenantError, saveError, systemPrompt: tenant?.systemPrompt || '',
       tenants: tenant ? [tenant] : [], activeTenantId: tid, currentUser, authLoading, subscription,
       login, logout, registerAccount, cancelSubscription, deleteAccount,
       canDeleteAccount: !!tenant && !TENANTS.some(t => t.id === tenant.id),
