@@ -177,5 +177,5 @@ STYLE: Plain English. Numbers first. One specific next action per response. 3–
 ]
 
 export function getTenantById(id) {
-  return TENANTS.find(t => t.id === id) || TENANTS[0]
+  return TENANTS.find(t => t.id === id) || null
 }
