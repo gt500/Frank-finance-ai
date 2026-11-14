@@ -7,6 +7,7 @@
 // PAY_REQUEST_ID cannot reactivate a cancelled or deleted account's billing.
 import { createClient } from "npm:@supabase/supabase-js@2"
 import { queryPayRequest } from "../_shared/paygate.ts"
+import { notifyOps } from "../_shared/notify.ts"
 import { notifyTransition, NOTIFIABLE_STATUSES, addOneMonth } from "../../../src/lib/billing.js"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
@@ -43,10 +44,15 @@ Deno.serve(async (req) => {
       // Tenant already has an active subscription, so the customer paid twice. Flag the row
       // for a manual refund and ack, so PayGate stops retrying.
       console.error(`paygate-notify: DOUBLE PAYMENT on ${payRequestId} — refund needed`)
-      const { error: flagErr } = await supabase.from("subscriptions")
+      const { data: flagged, error: flagErr } = await supabase.from("subscriptions")
         .update({ status: "duplicate_paid", vault_id: vaultId, result_code: resultCode })
         .eq("pay_request_id", payRequestId).in("status", NOTIFIABLE_STATUSES)
+        .select("id, tenant_id")
       if (flagErr) throw flagErr
+      if (flagged?.length) {
+        await notifyOps(supabase, { type: "duplicate_paid", tenant_id: flagged[0].tenant_id, subscription_id: flagged[0].id,
+          detail: `PayGate checkout ${payRequestId} was paid, but this tenant already has an active subscription. Refund this payment.` })
+      }
       return new Response("OK", { status: 200 })
     }
     if (error) throw error

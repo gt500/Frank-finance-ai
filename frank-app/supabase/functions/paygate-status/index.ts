@@ -2,12 +2,12 @@
 // Status check for the billing return page — returns only what's safe to show
 // the customer, and only for a checkout that belongs to the caller's own tenant.
 import { createClient } from "npm:@supabase/supabase-js@2"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders, withCors } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: { ...corsHeaders, "Access-Control-Allow-Methods": "GET, OPTIONS" } })
 
   const url = new URL(req.url)
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   if (error) return json({ error: "Could not check payment status" }, 500)
   if (!data) return json({ status: "unknown" })
   return json(data)
-})
+}))
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

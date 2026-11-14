@@ -2,12 +2,12 @@
 // service role's admin API. Caller must be authenticated; we only ever
 // delete the calling user's own account, never an arbitrary id passed in.
 import { createClient } from "npm:@supabase/supabase-js@2"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders, withCors } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
@@ -45,10 +45,10 @@ Deno.serve(async (req) => {
   // so they're left alone intentionally (billing history should outlive an
   // account deletion for audit purposes).
   const { error: delErr } = await admin.auth.admin.deleteUser(userId)
-  if (delErr) return json({ error: delErr.message }, 500)
+  if (delErr) return fail("delete auth user", delErr)
 
   return json({ deleted: true })
-})
+}))
 
 function fail(step: string, error: unknown) {
   console.error(`delete-account: ${step} failed — account NOT deleted`, error)

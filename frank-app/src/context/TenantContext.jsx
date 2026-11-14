@@ -1,13 +1,11 @@
 import { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react'
 import { TENANTS } from '../data/tenants'
-import { C } from '../lib/theme'
 import { supabase } from '../lib/supabaseClient'
 import { simplePayApi } from '../lib/simplePayApi'
 import { buildMonthlyEntry, mergeMonthly, removeMonthly } from '../lib/monthlyHistory'
 import { createSaveQueue } from '../lib/saveQueue'
 
 const TenantContext = createContext(null)
-const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN
 const LEGACY_KEYS = ['zeeder_accounts','zeeder_user','zeeder_custom_tenants','zeeder_imported_data','zeeder_simplepay_keys','zeeder_tenant']
 
 function extractEntityName(description) {
@@ -32,7 +30,6 @@ export function TenantProvider({ children }) {
   const [monthly, setMonthly] = useState(null)
   const [simplePayConnected, setSimplePayConnected] = useState(false)
   const [subscription, setSubscription] = useState(null)
-  const [adminUnlocked, setAdminUnlocked] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState({ count: 0, lockedUntil: 0 })
   const [saveError, setSaveError] = useState(null)
   const tid = currentUser?.tenantId
@@ -55,7 +52,7 @@ export function TenantProvider({ children }) {
     saveTidRef.current = null
     saveQueueRef.current?.reset()
     setCurrentUser(null); setTenant(null); setSubscription(null); setSimplePayConnected(false)
-    setSaveError(null); setAdminUnlocked(false)
+    setSaveError(null)
     applyBankData(null); applyImported({}); applyMonthly(null)
   }
 
@@ -264,17 +261,13 @@ export function TenantProvider({ children }) {
     applyBankData(null); applyMonthly(newMonthly); persist({ bank_data: null, monthly: newMonthly })
   }
 
-  function switchTenant() { /* single workspace per account — cross-tenant switching removed */ }
-  function unlockAdmin(pin) { if (pin === ADMIN_PIN) { setAdminUnlocked(true); return true } return false }
-  function lockAdmin() { setAdminUnlocked(false) }
 
   return (
     <TenantContext.Provider value={{
       tenant, data: mergedData, tenantError, saveError, retrySave: () => saveQueueRef.current.retry(), systemPrompt: tenant?.systemPrompt || '',
-      tenants: tenant ? [tenant] : [], activeTenantId: tid, currentUser, authLoading, subscription,
+      activeTenantId: tid, currentUser, authLoading, subscription,
       login, logout, registerAccount, cancelSubscription, deleteAccount,
       canDeleteAccount: !!tenant && !TENANTS.some(t => t.id === tenant.id),
-      switchTenant, adminUnlocked, unlockAdmin, lockAdmin,
       bankData, loadBankStatement, updateEntityName, confirmBankReconciliation, clearBankData,
       importDebtors: r => setImport('DEBTORS', r), importCreditors: r => setImport('CREDITORS', r),
       clearImportedDebtors: () => clearImport('DEBTORS'), clearImportedCreditors: () => clearImport('CREDITORS'),
@@ -290,17 +283,4 @@ export function useTenant() {
   const ctx = useContext(TenantContext)
   if (!ctx) throw new Error('useTenant must be used inside TenantProvider')
   return ctx
-}
-
-export function AdminSwitcher({ onClose }) {
-  const { tenant } = useTenant()
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 280, margin: '0 0 70px 10px', background: '#0f1e35', border: `1px solid ${C.border}`, borderRadius: 8, padding: 18 }}>
-        <div style={{ fontSize: 13, color: C.text }}>{tenant?.name}</div>
-        <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>One workspace per account. Cross-tenant switching has been removed.</div>
-        <button onClick={onClose} style={{ marginTop: 12, padding: '8px 12px', background: 'transparent', border: `1px solid ${C.border}`, color: C.sub, borderRadius: 5, cursor: 'pointer' }}>Close</button>
-      </div>
-    </div>
-  )
 }

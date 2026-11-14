@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders, withCors } from "../_shared/cors.ts"
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const BASE = "https://api.payroll.simplepay.cloud/v1"
@@ -11,7 +11,7 @@ async function sp(path: string, key: string) {
   return res.json()
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
   const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "")
@@ -53,8 +53,13 @@ Deno.serve(async (req) => {
     if (action === "employees") return json(await sp(`/clients/${cid}/employees`, sec.simplepay_key))
     if (action === "payment_runs") return json(await sp(`/clients/${cid}/payment_runs`, sec.simplepay_key))
     return json({ error: "Unknown action" }, 400)
-  } catch (err) { return json({ error: String(err) }, 502) }
-})
+  } catch (err) {
+    // sp() errors ("SimplePay 401 — check API key") are ours and safe to show; anything else is not.
+    console.error("simplepay-proxy:", err)
+    const msg = err instanceof Error && err.message.startsWith("SimplePay ") ? err.message : "Could not reach SimplePay — please try again."
+    return json({ error: msg }, 502)
+  }
+}))
 function saveFailed(step: string, error: unknown) {
   console.error(`simplepay-proxy: ${step} failed`, error)
   return json({ error: "SimplePay request failed on our side — please try again." }, 500)

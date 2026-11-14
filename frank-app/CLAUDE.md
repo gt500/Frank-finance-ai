@@ -13,7 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `src/pages/` — pre-auth flow (Landing, Login, Onboarding)
   - `src/context/TenantContext.jsx` — single source of truth: auth, tenant data, bank data, imported spreadsheet data
   - `src/hooks/useFrank.js` — Anthropic API: chat (`claude-sonnet-4-6`) + document extraction `extractFromDocument()` (`claude-haiku-4-5-20251001`)
-  - `src/hooks/useWonderlandData.js`, `src/hooks/useSimplePayData.js` — live data hooks, **Wonderland-only** (gated by `tenant.id === 'wonderland-educare'` in `App.jsx`; other tenants get `null`)
+  - `src/hooks/useWonderlandData.js` — live data hook, **Wonderland-only** (gated by `tenant.id === 'wonderland-educare'` in `App.jsx`; other tenants get `null`)
+  - `src/hooks/useSimplePayData.js` — payroll via the `simplepay-proxy` edge function, any workspace that connected a key in Connections
   - `src/data/tenants.js` — tenant definitions (Wonderland Educare real client + Cape Fresh demo)
   - `src/lib/theme.js` — brand CI constants (C.frank teal, C.gold, C.bg pure black, FONT_BODY Century Gothic, FONT_SUB Bruno Ace)
   - `src/test/` — Vitest test setup (mocks `FileReader` globally for document-extraction tests)
@@ -21,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 All run from `frank-app/`:
-- `npm run dev` — start Vite dev server on port 3000 (proxies `/api/claude` → Anthropic, `/wl-api` → Wonderland management API, `/simplepay` → SimplePay payroll API — see `vite.config.js`)
+- `npm run dev` — start Vite dev server on port 3000 (no proxies: Anthropic, Wonderland and SimplePay all go through Supabase edge functions)
 - `npm run build` — production build (`vite build`)
 - `npm test` — run the full Vitest suite once
 - `npm run test:watch` — Vitest watch mode
@@ -29,7 +30,7 @@ All run from `frank-app/`:
 - `npm run lint` — ESLint over `src` (`.jsx`/`.js`)
 
 ## Auth Flow
-`App.jsx` renders `TenantProvider` → `AppContent`. Unauthenticated (`!currentUser`) shows `Login` or `Onboarding` (`pages/`); `registerAccount()` in `TenantContext` builds a fresh custom tenant via `buildNewTenant()` with zeroed starter data. Authenticated users see the `Sidebar` + routed view (`view` state, no React Router route change — `VIEW_LABELS` in `App.jsx` maps view keys to titles).
+`App.jsx` renders `TenantProvider` → `AppContent` → `AppShell` (keyed per user, so nothing carries over between accounts). Unauthenticated (`!currentUser`) shows `Login` or `Onboarding` (`pages/`); `registerAccount()` calls Supabase `signUp`, and the `handle_new_user` DB trigger creates the profile + `tenants` row with zeroed starter data. Saves go through `src/lib/saveQueue.js` (ordered, retried). Authenticated users see the `Sidebar` + routed view (`view` state, no React Router route change — `VIEW_LABELS` in `App.jsx` maps view keys to titles).
 
 ---
 
@@ -38,8 +39,8 @@ All run from `frank-app/`:
 ### Multi-Tenant
 - Every data access goes through `useTenant()` — never import from `tenants.js` directly in views
 - `mergedData` in TenantContext overlays imported spreadsheet data over static tenant data
-- Admin PIN from `VITE_ADMIN_PIN` env var · Private accounts validated at login time against `VITE_WONDERLAND_PASSWORD` — **never written to localStorage**
-- localStorage keys: `zeeder_accounts`, `zeeder_user`, `zeeder_tenant`, `zeeder_custom_tenants`, `zeeder_imported_data`, `zeeder_bank_${tenantId}`
+- Auth is Supabase Auth only; one workspace per account (no admin PIN, no tenant switching) · workspace data lives in the `tenant_data` table, never localStorage
+- localStorage: the old `zeeder_*` data keys are purged on login (legacy cross-tenant leak). The only key written is `zeeder_last_view_${userId}` (a view name, no data)
 
 ### Data Priority (Debtors & Creditors)
 Bank statement confirmed → imported spreadsheet → static tenant data

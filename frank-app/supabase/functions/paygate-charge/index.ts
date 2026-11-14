@@ -4,7 +4,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2"
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2"
 import { chargeVault } from "../_shared/paygate.ts"
-import { notifyDowngrade } from "../_shared/notify.ts"
+import { notifyDowngrade, notifyOps } from "../_shared/notify.ts"
 import { nextDunningState } from "../../../src/lib/dunning.js"
 import { addOneMonth } from "../../../src/lib/billing.js"
 
@@ -63,6 +63,8 @@ Deno.serve(async (req) => {
       // so no automatic retry; record it so someone can reconcile against PayGate.
       console.error(`paygate-charge: outcome UNKNOWN for ${merchantOrderId} — reconcile manually`, chargeErr)
       await recordCharge(supabase, { subscription_id, merchant_order_id: merchantOrderId, amount_cents: sub.amount_cents, status: "unknown", result_desc: String(chargeErr).slice(0, 200) })
+      await notifyOps(supabase, { type: "charge_unknown", tenant_id: sub.tenant_id, subscription_id: sub.id,
+        detail: `Recurring charge ${merchantOrderId} (R ${(sub.amount_cents / 100).toFixed(2)}) failed with an unknown outcome. Check PayGate: if it went through, set last_charged_at; if not, set next_charge_at to now to retry.` })
       return json({ error: "Charge outcome unknown — flagged for reconciliation" }, 502)
     }
 
@@ -109,7 +111,7 @@ Deno.serve(async (req) => {
     return json({ approved, failed_charge_count: dunning.failed_charge_count, downgraded: dunning.downgrade, ...result })
   } catch (err) {
     console.error(err)
-    return json({ error: String(err) }, 500)
+    return json({ error: "Charge failed — see function logs" }, 500)
   }
 })
 

@@ -7,7 +7,7 @@
 // row for an arbitrary tenant_id and trigger real PayGate API calls.
 import { createClient } from "npm:@supabase/supabase-js@2"
 import { initiateWebPayment } from "../_shared/paygate.ts"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders, withCors } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -18,7 +18,7 @@ const PLANS: Record<string, number> = {
   growth: 99900, // R999.00 in cents
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
@@ -80,9 +80,9 @@ Deno.serve(async (req) => {
     return json({ redirect_url: redirectUrl, pay_request_id: payRequestId })
   } catch (err) {
     console.error(err)
-    return json({ error: String(err) }, 500)
+    return json({ error: "Could not start checkout right now — please try again." }, 500)
   }
-})
+}))
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

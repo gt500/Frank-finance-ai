@@ -1,6 +1,5 @@
-import { useState } from 'react'
 import { C, FONT_BODY, FONT_SUB } from '../lib/theme'
-import { useTenant, AdminSwitcher } from '../context/TenantContext'
+import { useTenant } from '../context/TenantContext'
 import { supabase } from '../lib/supabaseClient'
 
 const NAV_ITEMS = [
@@ -17,8 +16,7 @@ const NAV_ITEMS = [
 ]
 
 export function Sidebar({ view, onNav, onAsk }) {
-  const { tenant, data, tenants, bankData, currentUser, logout, deleteAccount, canDeleteAccount, subscription, cancelSubscription } = useTenant()
-  const [showSwitcher, setShowSwitcher] = useState(false)
+  const { tenant, data, bankData, currentUser, logout, deleteAccount, canDeleteAccount, subscription, cancelSubscription } = useTenant()
   const hScore    = Math.round(data.HEALTH_CHECKS.reduce((a, h) => a + h.score, 0) / data.HEALTH_CHECKS.length)
   const highFlags = data.CASHFLOW_FLAGS.filter(f => f.severity === 'HIGH').length
   const hColor    = hScore > 75 ? C.frank : hScore > 55 ? C.warn : C.danger
@@ -98,9 +96,6 @@ export function Sidebar({ view, onNav, onAsk }) {
             <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, textTransform: 'uppercase' }}>
               {subscription ? `${subscription.plan} Plan · R ${(subscription.amount_cents / 100).toLocaleString('en-ZA')}/mo` : `Trial — ${currentUser?.trialDaysLeft ?? 0} days left`}
             </div>
-            {tenants.length > 1 && (
-              <button onClick={() => setShowSwitcher(true)} title="Admin: switch tenant" style={{ padding: '3px 7px', borderRadius: 3, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 14, cursor: 'pointer', lineHeight: 1 }}>⚙</button>
-            )}
           </div>
           {subscription ? (
             <button onClick={async () => { if (window.confirm('Cancel your subscription? You keep access until the end of the paid period.')) { const r = await cancelSubscription(); if (!r.ok) onAsk(`Cancellation failed: ${r.error}`) } }}
@@ -123,7 +118,6 @@ export function Sidebar({ view, onNav, onAsk }) {
           )}
         </div>
       </aside>
-      {showSwitcher && <AdminSwitcher onClose={() => setShowSwitcher(false)} />}
     </>
   )
 }
