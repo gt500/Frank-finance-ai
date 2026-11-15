@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { C, GLASS, INSET } from '../../lib/theme'
+import { MailSettings } from './MailSettings'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -165,6 +166,7 @@ export function Connections({
         Green means live data is flowing. If something is not connected, Zeeder falls back to your uploaded documents.
       </div>
       <BanksPanel onUpload={onNav ? () => onNav('documents') : undefined} />
+      <div style={{ marginBottom: 12 }}><MailSettings /></div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         <ConnCard icon="🤖" name="Zeeder AI (Claude)"
           desc="Powers all of Zeeder's analysis, document reading, and financial insights. Uses Anthropic's Claude model."

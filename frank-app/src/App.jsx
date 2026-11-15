@@ -14,6 +14,7 @@ const CashFlow       = lazy(() => import('./components/views/CashFlow').then(m =
 const Reports        = lazy(() => import('./components/views/Reports').then(m => ({ default: m.Reports })))
 const Health         = lazy(() => import('./components/views/Health').then(m => ({ default: m.Health })))
 const Documents      = lazy(() => import('./components/views/Documents').then(m => ({ default: m.Documents })))
+const Invoices       = lazy(() => import('./components/views/Invoices').then(m => ({ default: m.Invoices })))
 const Debtors        = lazy(() => import('./components/views/Debtors').then(m => ({ default: m.Debtors })))
 const Creditors      = lazy(() => import('./components/views/Creditors').then(m => ({ default: m.Creditors })))
 const Connections    = lazy(() => import('./components/views/Connections').then(m => ({ default: m.Connections })))
@@ -22,7 +23,7 @@ const Chat           = lazy(() => import('./components/views/Chat').then(m => ({
 
 const VIEW_LABELS = {
   dashboard: 'Dashboard', cashflow: 'Cash Flow', reports: 'Reports', health: 'Business Health',
-  documents: 'Upload Documents', ar: 'Debtors', ap: 'Creditors', reconcile: 'Reconciliation',
+  documents: 'Upload Documents', invoices: 'Invoices & Quotes', ar: 'Debtors', ap: 'Creditors', reconcile: 'Reconciliation',
   connect: 'Connections', chat: 'Ask Zeeder',
 }
 
@@ -149,6 +150,7 @@ Be concise. Numbers first. One specific next action per answer.`
             {view === 'reports'    && <Reports        {...viewProps} />}
             {view === 'health'     && <Health         {...viewProps} />}
             {view === 'documents'  && <Documents      {...viewProps} onNav={setView} />}
+            {view === 'invoices'   && <Invoices       {...viewProps} onNav={setView} />}
             {view === 'ar'         && <Debtors        {...viewProps} onNav={setView} />}
             {view === 'ap'         && <Creditors      {...viewProps} onNav={setView} />}
             {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}

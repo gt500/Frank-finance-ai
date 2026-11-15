@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { C, fmt, GLASS, INSET } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
+import { PaymentMatches } from './PaymentMatches'
 
 function Section({ title, subtitle, children, accent }) {
   return (
@@ -168,6 +169,8 @@ export function Reconciliation({ onAsk, onNav }) {
             </div>
           </div>
         )}
+
+        <PaymentMatches credits={credits} />
 
         {/* ── Tabs ───────────────────────────────────── */}
         <Section title="Transaction Review" subtitle={`${unmatchedCount > 0 ? `${unmatchedCount} transactions need a name — click to rename` : 'All transactions matched'} · Click any name to edit it`}>

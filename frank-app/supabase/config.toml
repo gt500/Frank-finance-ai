@@ -35,3 +35,11 @@ verify_jwt = true
 
 [functions.wonderland-proxy]
 verify_jwt = true
+
+# Emails invoices, quotes and statements from the client's own mailbox; does its own tenant check as well.
+[functions.send-document]
+verify_jwt = true
+
+# Connects/disconnects the client's mailbox (password goes to Vault).
+[functions.mailbox]
+verify_jwt = true

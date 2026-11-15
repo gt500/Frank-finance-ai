@@ -52,3 +52,6 @@ export const GLASS = {
   borderRadius: 18,
 }
 export const INSET = 'rgba(0,0,0,0.25)'   // panel inside a glass panel
+
+// A document preview looks like the paper it becomes (the emailed PDF is white), so it has its own tokens.
+export const PAPER = { bg: '#f7f9fb', ink: '#17202b', muted: '#5b6673', rule: '#d5dbe2', accent: '#0b7f91' }
