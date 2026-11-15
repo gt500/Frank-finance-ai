@@ -152,7 +152,7 @@ Be concise. Numbers first. One specific next action per answer.`
             {view === 'ar'         && <Debtors        {...viewProps} onNav={setView} />}
             {view === 'ap'         && <Creditors      {...viewProps} onNav={setView} />}
             {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
-            {view === 'connect'    && <Connections    {...viewProps} />}
+            {view === 'connect'    && <Connections    {...viewProps} onNav={setView} />}
             {view === 'chat'       && <Chat frank={frank} systemPrompt={aiContext} />}
           </Suspense>
         </div>

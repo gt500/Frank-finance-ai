@@ -10,6 +10,7 @@ import { Dashboard } from './Dashboard'
 import { CashFlow } from './CashFlow'
 import { Reports } from './Reports'
 import { Health } from './Health'
+import { Connections } from './Connections'
 
 const workspace = (id) => {
   const tenant = TENANTS.find((t) => t.id === id)
@@ -74,5 +75,20 @@ describe('Brand-new empty workspace (Wonderland: all zeros, no forecast)', () =>
   test('Reports and Health do not crash', () => {
     expect(() => render(<Reports onAsk={vi.fn()} />)).not.toThrow()
     expect(() => render(<Health onAsk={vi.fn()} />)).not.toThrow()
+  })
+})
+
+describe('Connections', () => {
+  beforeEach(() => { current = workspace('cape-fresh-grocery') })
+
+  test('lists all five major banks with statement upload supported and live feed coming soon', () => {
+    const onNav = vi.fn()
+    render(<Connections onAsk={vi.fn()} onNav={onNav} loading={false} simplePayConnected={false} />)
+    for (const bank of ['FNB', 'Standard Bank', 'Nedbank', 'Absa', 'Capitec']) expect(screen.getAllByText(bank).length).toBeGreaterThan(0)
+    const panel = within(screen.getByText('Your bank').closest('.glass'))
+    expect(panel.getAllByText('Supported')).toHaveLength(5)
+    expect(panel.getAllByText('Coming soon')).toHaveLength(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Upload a statement' }))
+    expect(onNav).toHaveBeenCalledWith('documents')
   })
 })

@@ -117,8 +117,41 @@ function SimplePayCard({ payrollData, payrollLoading, payrollError, simplePayCon
   )
 }
 
+// The five major SA banks. Statement upload is real today; a live feed is not built (needs an open-banking provider).
+const BANKS = [
+  { name: 'FNB', mono: 'FNB' },
+  { name: 'Standard Bank', mono: 'SB' },
+  { name: 'Nedbank', mono: 'NB' },
+  { name: 'Absa', mono: 'AB' },
+  { name: 'Capitec', mono: 'CP' },
+]
+
+function BanksPanel({ onUpload }) {
+  return (
+    <div className="glass" style={{ padding: 20, marginBottom: 14 }}>
+      <h2 className="ttl">Your bank</h2>
+      <div style={{ fontSize: 13, color: C.soft, marginTop: 4, lineHeight: 1.5 }}>
+        Zeeder reads statements from all five major South African banks today. Live bank feeds are on the roadmap — until then, upload a statement and everything updates.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginTop: 14 }}>
+        {BANKS.map((b) => (
+          <div key={b.name} style={{ padding: 14, borderRadius: 14, background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: 'var(--font-logo)', fontSize: 11, color: C.gold, background: 'rgba(193,176,129,0.10)', border: '1px solid rgba(193,176,129,0.35)' }}>{b.mono}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{b.name}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.soft }}><span>Statement upload</span><span style={{ color: C.frank }}>Supported</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.soft }}><span>Live bank feed</span><span style={{ color: C.gold }}>Coming soon</span></div>
+          </div>
+        ))}
+      </div>
+      {onUpload && <button className="btn-gold" style={{ marginTop: 14 }} onClick={onUpload}>Upload a statement</button>}
+    </div>
+  )
+}
+
 export function Connections({
-  onAsk, liveData, loading, error, isWonderland,
+  onAsk, onNav, liveData, loading, error, isWonderland,
   payrollData, payrollLoading, payrollError, simplePayConnected, connectSimplePay, disconnectSimplePay,
 }) {
   const claudeOk  = Boolean(SUPABASE_URL)
@@ -131,7 +164,8 @@ export function Connections({
         These are the data sources Zeeder uses to give you real-time insights.
         Green means live data is flowing. If something is not connected, Zeeder falls back to your uploaded documents.
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}>
+      <BanksPanel onUpload={onNav ? () => onNav('documents') : undefined} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         <ConnCard icon="🤖" name="Zeeder AI (Claude)"
           desc="Powers all of Zeeder's analysis, document reading, and financial insights. Uses Anthropic's Claude model."
           status={claudeOk ? 'live' : 'error'}
@@ -153,10 +187,6 @@ export function Connections({
         )}
         <SimplePayCard payrollData={payrollData} payrollLoading={payrollLoading} payrollError={payrollError}
           simplePayConnected={simplePayConnected} connectSimplePay={connectSimplePay} disconnectSimplePay={disconnectSimplePay} onAsk={onAsk} />
-        <ConnCard icon="🏦" name="Absa Bank Feed"
-          desc="Direct bank feed for real-time transaction monitoring. Eliminates the need to upload bank statements manually."
-          status="soon" detail="Coming in next release — upload your bank statement PDF in the meantime"
-          onAsk={onAsk} askQ="What would a live Absa bank feed add to my financial visibility?" />
         <ConnCard icon="📒" name="Accounting Software"
           desc="Connect Sage, Xero, or QuickBooks to pull trial balances, aged debtors, and creditor reports automatically."
           status="soon" detail="Coming soon — upload your age analysis reports manually until then"
