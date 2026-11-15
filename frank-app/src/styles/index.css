@@ -86,3 +86,13 @@ input { font-family: var(--font); }
 .btn-ghost:hover { border-color: rgba(255,255,255,0.25); }
 .chart-row { cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(32,229,246,0.6); outline-offset: 2px; }
+
+/* Print or save as PDF: only the statement sheet is printed. */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; max-width: none !important; min-width: 0 !important; border-radius: 0 !important; }
+  .app-bg::before, .app-bg::after { display: none; }
+  .app-bg, .app-bg * { overflow: visible !important; height: auto !important; }
+  .app-bg, .app-bg > * { position: static !important; }
+}

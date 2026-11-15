@@ -12,6 +12,7 @@ import { BillingReturn } from './pages/BillingReturn'
 const Dashboard      = lazy(() => import('./components/views/Dashboard').then(m => ({ default: m.Dashboard })))
 const CashFlow       = lazy(() => import('./components/views/CashFlow').then(m => ({ default: m.CashFlow })))
 const Reports        = lazy(() => import('./components/views/Reports').then(m => ({ default: m.Reports })))
+const FinancialStatements = lazy(() => import('./components/views/FinancialStatements').then(m => ({ default: m.FinancialStatements })))
 const Health         = lazy(() => import('./components/views/Health').then(m => ({ default: m.Health })))
 const Documents      = lazy(() => import('./components/views/Documents').then(m => ({ default: m.Documents })))
 const Invoices       = lazy(() => import('./components/views/Invoices').then(m => ({ default: m.Invoices })))
@@ -22,7 +23,7 @@ const Reconciliation = lazy(() => import('./components/views/Reconciliation').th
 const Chat           = lazy(() => import('./components/views/Chat').then(m => ({ default: m.Chat })))
 
 const VIEW_LABELS = {
-  dashboard: 'Dashboard', cashflow: 'Cash Flow', reports: 'Reports', health: 'Business Health',
+  dashboard: 'Dashboard', cashflow: 'Cash Flow', reports: 'Reports', statements: 'Financial Statements', health: 'Business Health',
   documents: 'Upload Documents', invoices: 'Invoices & Quotes', ar: 'Debtors', ap: 'Creditors', reconcile: 'Reconciliation',
   connect: 'Connections', chat: 'Ask Zeeder',
 }
@@ -148,6 +149,7 @@ Be concise. Numbers first. One specific next action per answer.`
             {view === 'dashboard'  && <Dashboard      {...viewProps} />}
             {view === 'cashflow'   && <CashFlow       {...viewProps} />}
             {view === 'reports'    && <Reports        {...viewProps} />}
+            {view === 'statements' && <FinancialStatements {...viewProps} />}
             {view === 'health'     && <Health         {...viewProps} />}
             {view === 'documents'  && <Documents      {...viewProps} onNav={setView} />}
             {view === 'invoices'   && <Invoices       {...viewProps} onNav={setView} />}
