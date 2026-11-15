@@ -1,23 +1,24 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #060C18;
-  --sidebar:   #0C1928;
-  --card:      #0F2035;
-  --border:    #1A3050;
+  --bg:        #000000;
+  --sidebar:   #0A0A0A;
+  --card:      #172748;
+  --border:    #1e3a60;
   --frank:     #20e5f6;
   --frank-dim: #20e5f608;
   --frank-mid: #20e5f618;
-  --text:      #D8E8F2;
-  --sub:       #5F8AAA;
-  --dim:       #3A5A75;
-  --muted:     #1A3050;
+  --gold:      #c1b081;
+  --text:      #E8F2F8;
+  --sub:       #B7CCDB;
+  --dim:       #8FA9BF;
+  --muted:     #1e3a60;
   --teal:      #22a5c8;
-  --warn:      #c1b081;
+  --warn:      #e2b65a;
   --danger:    #FF3D57;
-  --font:      'Syne', 'Century Gothic', 'Trebuchet MS', sans-serif;
+  --font:      'Century Gothic', 'Questrial', 'Trebuchet MS', sans-serif;
   --font-logo: 'Bruno Ace', 'Century Gothic', sans-serif;
-  --mono:      'JetBrains Mono', monospace;
+  --mono:      'JetBrains Mono', ui-monospace, monospace;
 }
 
 html, body, #root {
@@ -59,3 +60,29 @@ input { font-family: var(--font); }
 
 .nav-item { transition: background .15s, color .15s, border-color .15s; }
 .nav-item:hover { background: var(--frank-dim) !important; color: var(--frank) !important; }
+
+/* ── Glass redesign ───────────────────────────────────────────── */
+.app-bg { position: relative; overflow: hidden; background: #000; }
+.app-bg::before, .app-bg::after { content: ''; position: absolute; border-radius: 50%; pointer-events: none; z-index: 0; }
+.app-bg::before { width: 760px; height: 760px; left: -220px; top: -260px; background: radial-gradient(circle, rgba(32,229,246,0.18) 0%, rgba(32,229,246,0) 65%); }
+.app-bg::after  { width: 900px; height: 900px; right: -280px; bottom: -300px; background: radial-gradient(circle, rgba(25,110,149,0.30) 0%, rgba(25,110,149,0) 65%); }
+.app-bg > * { position: relative; z-index: 1; }
+
+.glass {
+  background: linear-gradient(160deg, rgba(30,58,96,0.50) 0%, rgba(23,39,72,0.28) 100%);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 24px 48px -28px rgba(0,0,0,0.9);
+  border-radius: 18px;
+}
+.ttl { margin: 0; font-size: 13px; font-weight: 400; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
+.tag { font-family: var(--font-logo); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--frank); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
+.btn-gold { min-height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--gold); background: rgba(193,176,129,0.10); color: #e2c98f; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.btn-gold:hover { background: rgba(193,176,129,0.18); }
+.btn-ghost { min-height: 40px; padding: 0 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: var(--text); font-size: 13px; cursor: pointer; }
+.btn-ghost:hover { border-color: rgba(255,255,255,0.25); }
+.chart-row { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(32,229,246,0.6); outline-offset: 2px; }

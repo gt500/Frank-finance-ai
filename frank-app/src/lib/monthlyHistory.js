@@ -18,3 +18,12 @@ export function removeMonthly(history, bankData) {
   const rest = withoutMonth(history, buildMonthlyEntry(bankData))
   return rest.length ? rest : null
 }
+
+const WEEKS_PER_MONTH = 4.33
+/** Cash safety buffer = one week of average spending, over months that have statement data. 0 = no data yet. */
+export function safetyBuffer(history) {
+  const months = (history || []).filter((m) => (m.rev || 0) > 0 || (m.exp || 0) > 0)
+  if (!months.length) return 0
+  const avgMonthlySpend = months.reduce((a, m) => a + (m.exp || 0), 0) / months.length
+  return Math.round(avgMonthlySpend / WEEKS_PER_MONTH / 1000) * 1000
+}

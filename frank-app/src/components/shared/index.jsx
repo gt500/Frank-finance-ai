@@ -1,12 +1,15 @@
 import { C, fmt } from '../../lib/theme'
 
+// Charts and status chips never use alarm red (see CHART in theme.js): red maps to the gold warning tone.
+const tone = (color) => (color === C.danger ? C.watch : color)
+
 export function Card({ title, sub, children, style = {} }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 7, padding: '18px', ...style }}>
+    <div className="glass" style={{ padding: '20px', ...style }}>
       {(title || sub) && (
         <div style={{ marginBottom: 14 }}>
-          {title && <div style={{ fontSize: 16, fontWeight: 600, color: C.text }}>{title}</div>}
-          {sub   && <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{sub}</div>}
+          {title && <h2 className="ttl">{title}</h2>}
+          {sub   && <div style={{ fontSize: 13, color: C.label, marginTop: 4 }}>{sub}</div>}
         </div>
       )}
       {children}
@@ -16,7 +19,7 @@ export function Card({ title, sub, children, style = {} }) {
 
 export function SLabel({ children }) {
   return (
-    <div style={{ fontSize: 12, letterSpacing: 2.5, color: C.sub, textTransform: 'uppercase', marginBottom: 9 }}>
+    <div className="ttl" style={{ marginBottom: 10 }}>
       {children}
     </div>
   )
@@ -25,24 +28,25 @@ export function SLabel({ children }) {
 export function StatBox({ label, value, sub, color, onClick }) {
   return (
     <div onClick={onClick}
-      className={onClick ? 'hover-card' : ''}
-      style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `2px solid ${color}`, borderRadius: 6, padding: '15px 16px', cursor: onClick ? 'pointer' : 'default' }}>
-      <div style={{ fontSize: 12, color: C.sub, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 7 }}>{label}</div>
-      <div style={{ fontSize: 25, fontWeight: 800, color, letterSpacing: '-0.3px', marginBottom: 3, fontFamily: 'var(--mono)' }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: C.dim }}>{sub}</div>}
+      className={`glass${onClick ? ' hover-card' : ''}`}
+      style={{ padding: '16px 18px', cursor: onClick ? 'pointer' : 'default' }}>
+      <div style={{ fontSize: 12, color: C.label, letterSpacing: 1.8, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+      <div className="num nowrap" style={{ fontSize: 25, fontWeight: 600, color: tone(color) === C.frank ? C.bright : tone(color), letterSpacing: '-0.3px', marginBottom: 3 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: C.label }}>{sub}</div>}
     </div>
   )
 }
 
-export function Alert({ color, icon = '⚠', children, onAsk }) {
+export function Alert({ color: rawColor, icon = '⚠', children, onAsk }) {
+  const color = tone(rawColor)
   return (
-    <div style={{ padding: '11px 16px', background: `${color}10`, border: `1px solid ${color}44`, borderLeft: `3px solid ${color}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+    <div style={{ padding: '12px 16px', background: `${color}12`, border: `1px solid ${color}40`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
         <span style={{ color, fontSize: 16, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: 14, color: C.text, lineHeight: 1.5 }}>{children}</span>
       </div>
       {onAsk && (
-        <button onClick={onAsk} style={{ fontSize: 12, color, background: 'transparent', border: `1px solid ${color}44`, borderRadius: 4, padding: '3px 11px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        <button onClick={onAsk} style={{ fontSize: 12, color, background: 'transparent', border: `1px solid ${color}44`, borderRadius: 999, padding: '5px 12px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
           Ask Zeeder
         </button>
       )}
@@ -50,23 +54,24 @@ export function Alert({ color, icon = '⚠', children, onAsk }) {
   )
 }
 
-export function Badge({ label, color, size = 'md' }) {
+export function Badge({ label, color: rawColor, size = 'md' }) {
+  const color = tone(rawColor)
   const padding = size === 'sm' ? '2px 6px' : '3px 9px'
   const fontSize = size === 'sm' ? 11 : 12
   return (
-    <span style={{ fontSize, padding, borderRadius: 3, background: `${color}20`, color, border: `1px solid ${color}44`, letterSpacing: 1, fontWeight: 600, whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize, padding, borderRadius: 999, background: `${color}1c`, color, border: `1px solid ${color}44`, letterSpacing: 0.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
       {label}
     </span>
   )
 }
 
 export function RiskDot({ risk }) {
-  const color = risk === 'high' ? C.danger : risk === 'med' ? C.warn : C.frank
+  const color = risk === 'high' ? C.watch : risk === 'med' ? C.gold : C.frank
   return <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
 }
 
 export function ConfBadge({ value }) {
-  const color = value === 'high' ? C.frank : value === 'medium' ? C.warn : value === 'low' ? C.danger : C.dim
+  const color = value === 'high' ? C.frank : value === 'medium' ? C.gold : value === 'low' ? C.watch : C.dim
   return <Badge label={value || '?'} color={color} size="sm" />
 }
 
@@ -79,12 +84,12 @@ export function Spinner({ color = C.frank, size = 22 }) {
 export function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: '11px 16px', fontSize: 13, minWidth: 150 }}>
-      <div style={{ color: C.sub, marginBottom: 7, fontWeight: 600, fontSize: 15 }}>{label}</div>
+    <div className="glass" style={{ borderRadius: 12, padding: '11px 16px', fontSize: 13, minWidth: 150 }}>
+      <div style={{ color: C.soft, marginBottom: 7, fontWeight: 600, fontSize: 14 }}>{label}</div>
       {payload.map((p, i) => p.value != null && (
-        <div key={i} style={{ color: p.color || C.text, marginBottom: 3, display: 'flex', justifyContent: 'space-between', gap: 14 }}>
-          <span>{p.name}</span>
-          <strong>{typeof p.value === 'number' ? fmt(Math.abs(p.value)) : p.value}</strong>
+        <div key={i} style={{ color: C.text, marginBottom: 3, display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: p.color }} />{p.name}</span>
+          <strong className="num">{typeof p.value === 'number' ? fmt(Math.abs(p.value)) : p.value}</strong>
         </div>
       ))}
     </div>

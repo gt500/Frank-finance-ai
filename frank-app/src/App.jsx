@@ -122,21 +122,20 @@ Be concise. Numbers first. One specific next action per answer.`
   if (!tenant || !data) return spinner
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
+    <div className="app-bg" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar view={view} onNav={setView} onAsk={goChat} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: C.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        <header style={{ padding: '22px 26px 10px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: 0.5 }}>{VIEW_LABELS[view]}</div>
-            <div style={{ fontSize: 13, color: C.sub, marginTop: 2, letterSpacing: 0.5 }}>
+            <div className="tag">
               {tenant.name} · {new Date().toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
             </div>
+            <h1 style={{ margin: '6px 0 0', fontSize: 28, fontWeight: 700, color: C.text, letterSpacing: 0.2 }}>{VIEW_LABELS[view]}</h1>
           </div>
-          <button onClick={() => goChat(`Give me a complete financial briefing for ${tenant.name} with cashflow risks and the 3 most urgent actions`)}
-            style={{ padding: '7px 16px', borderRadius: 4, border: `1px solid ${C.frank}30`, background: C.frankDim, color: C.frank, cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase' }}>
-            ⚡ Full Briefing
+          <button className="btn-gold" onClick={() => goChat(`Give me a complete financial briefing for ${tenant.name} with cashflow risks and the 3 most urgent actions`)}>
+            Full briefing
           </button>
-        </div>
+        </header>
         {saveError && (
           <div role="alert" style={{ padding: '8px 24px', background: `${C.danger}18`, borderBottom: `1px solid ${C.danger}40`, color: C.danger, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12 }}>
             <span>{saveError}</span>

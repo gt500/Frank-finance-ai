@@ -1,18 +1,18 @@
 import { useState } from 'react'
-import { C, fmt } from '../../lib/theme'
+import { C, fmt, GLASS, INSET } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 import { SpreadsheetImporter } from '../SpreadsheetImporter'
 
 function statusBadge(c) {
-  if (c.overdue)        return { label: 'OVERDUE',       color: C.danger }
-  if (c.daysLeft <= 7)  return { label: 'DUE THIS WEEK', color: C.danger }
+  if (c.overdue)        return { label: 'OVERDUE',       color: C.watch }
+  if (c.daysLeft <= 7)  return { label: 'DUE THIS WEEK', color: C.watch }
   if (c.daysLeft <= 14) return { label: 'DUE SOON',      color: C.warn }
   return { label: 'OK', color: C.frank }
 }
 
 function Section({ title, subtitle, children, accent }) {
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', background: C.card }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', ...GLASS }}>
       <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: accent ? `${accent}08` : 'transparent' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
         {subtitle && <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{subtitle}</div>}
@@ -42,18 +42,18 @@ export function Creditors({ onAsk, onNav }) {
     return a.daysLeft - b.daysLeft
   })
 
-  const urgencyColor = (rank) => rank === 0 ? C.danger : rank === 1 ? C.warn : C.frank
+  const urgencyColor = (rank) => rank === 0 ? C.watch : rank === 1 ? C.warn : C.frank
 
   return (
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
 
       {/* ── Page Header ──────────────────────────────────────── */}
-      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, background: C.card }}>
+      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, ...GLASS }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Bills to Pay</div>
         <div style={{ fontSize: 13, color: C.sub }}>Everything you currently owe to suppliers — amounts, due dates, and which ones to pay first.</div>
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: '#0a1828' }}>
+      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: INSET }}>
 
         {/* ── Bank source banner ───────────────────────────── */}
         {bankConfirmed && (
@@ -65,7 +65,7 @@ export function Creditors({ onAsk, onNav }) {
               <button onClick={() => onNav('reconcile')} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${C.frank}30`, background: 'transparent', color: C.frank, fontSize: 11, cursor: 'pointer' }}>
                 View Reconciliation
               </button>
-              <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${C.danger}30`, background: 'transparent', color: C.danger, fontSize: 11, cursor: 'pointer' }}>
+              <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${C.watch}30`, background: 'transparent', color: C.watch, fontSize: 11, cursor: 'pointer' }}>
                 ✕ Clear statement
               </button>
             </div>
@@ -87,23 +87,23 @@ export function Creditors({ onAsk, onNav }) {
         {/* ── Section 1: Summary Figures ───────────────────── */}
         <Section title="Summary — What You Owe" subtitle="A quick overview of all outstanding supplier bills">
           <div style={{ display: 'flex', gap: 14 }}>
-            <div style={{ flex: 1, background: '#0a1828', border: `1px solid ${C.warn}30`, borderRadius: 8, padding: '18px 20px' }}>
+            <div style={{ flex: 1, background: INSET, border: `1px solid ${C.warn}30`, borderRadius: 8, padding: '18px 20px' }}>
               <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Total Owed to Suppliers</div>
               <div style={{ fontSize: 38, fontWeight: 800, color: C.warn, fontFamily: 'var(--mono)', lineHeight: 1 }}>{fmt(totalOwed)}</div>
               <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>{CREDITORS.length} supplier{CREDITORS.length !== 1 ? 's' : ''}</div>
             </div>
-            <div style={{ flex: 1, background: '#0a1828', border: `1px solid ${totalOverdue > 0 ? C.danger : C.border}30`, borderRadius: 8, padding: '18px 20px' }}>
+            <div style={{ flex: 1, background: INSET, border: `1px solid ${totalOverdue > 0 ? C.watch : C.border}30`, borderRadius: 8, padding: '18px 20px' }}>
               <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Overdue Right Now</div>
-              <div style={{ fontSize: 38, fontWeight: 800, color: totalOverdue > 0 ? C.danger : C.frank, fontFamily: 'var(--mono)', lineHeight: 1 }}>
+              <div style={{ fontSize: 38, fontWeight: 800, color: totalOverdue > 0 ? C.watch : C.frank, fontFamily: 'var(--mono)', lineHeight: 1 }}>
                 {totalOverdue > 0 ? fmt(totalOverdue) : 'None'}
               </div>
               <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>
                 {totalOverdue > 0 ? 'Pay immediately to avoid supply disruption' : 'Nothing overdue — well done'}
               </div>
             </div>
-            <div style={{ flex: 1, background: '#0a1828', border: `1px solid ${dueSoon > 0 ? C.danger : C.border}30`, borderRadius: 8, padding: '18px 20px' }}>
+            <div style={{ flex: 1, background: INSET, border: `1px solid ${dueSoon > 0 ? C.watch : C.border}30`, borderRadius: 8, padding: '18px 20px' }}>
               <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>Due This Week</div>
-              <div style={{ fontSize: 38, fontWeight: 800, color: dueSoon > 0 ? C.danger : C.frank, fontFamily: 'var(--mono)', lineHeight: 1 }}>
+              <div style={{ fontSize: 38, fontWeight: 800, color: dueSoon > 0 ? C.watch : C.frank, fontFamily: 'var(--mono)', lineHeight: 1 }}>
                 {dueSoon > 0 ? fmt(dueSoon) : 'None'}
               </div>
               <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>
@@ -136,7 +136,7 @@ export function Creditors({ onAsk, onNav }) {
                     alignItems: 'center',
                     padding: '14px 12px',
                     borderBottom: i < CREDITORS.length - 1 ? `1px solid ${C.border}` : 'none',
-                    background: isUrgent ? `${C.danger}06` : 'transparent',
+                    background: isUrgent ? `${C.watch}06` : 'transparent',
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name}</div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: 'var(--mono)' }}>{fmt(c.amount)}</div>
@@ -194,7 +194,7 @@ export function Creditors({ onAsk, onNav }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
             <div style={{ fontSize: 14, color: C.text, lineHeight: 1.8, flex: 1 }}>
               {totalOverdue > 0 && (
-                <>You have <strong style={{ color: C.danger }}>{fmt(totalOverdue)}</strong> in overdue bills — pay these immediately to avoid service disruption. </>
+                <>You have <strong style={{ color: C.watch }}>{fmt(totalOverdue)}</strong> in overdue bills — pay these immediately to avoid service disruption. </>
               )}
               {sortedByUrgency[0] && (
                 <>Your most urgent upcoming bill is <strong style={{ color: C.warn }}>{sortedByUrgency[0].name}</strong> at {fmt(sortedByUrgency[0].amount)}{sortedByUrgency[0].daysLeft > 0 ? `, due in ${sortedByUrgency[0].daysLeft} days` : ' (overdue)'}. </>

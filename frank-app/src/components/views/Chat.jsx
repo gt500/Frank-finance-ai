@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { C } from '../../lib/theme'
+import { C, GLASS } from '../../lib/theme'
 import { ChatMessage, TypingIndicator } from '../shared'
 
 const QUICK_QUESTIONS = [
@@ -41,7 +41,7 @@ export function Chat({ frank, systemPrompt }) {
           <input value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="Ask Zeeder about your finances..."
-            style={{ flex: 1, padding: '13px 16px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 15 }} />
+            style={{ flex: 1, padding: '13px 16px', ...GLASS, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 15 }} />
           <button onClick={handleSend} disabled={loading || !input.trim()}
             style={{ padding: '13px 24px', background: input.trim() && !loading ? C.frank : C.muted, border: 'none', borderRadius: 6, color: C.bg, cursor: input.trim() && !loading ? 'pointer' : 'default', fontWeight: 700, fontSize: 15, transition: 'background .15s' }}>
             {loading ? '...' : 'Send'}

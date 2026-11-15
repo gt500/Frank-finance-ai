@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { C, fmt } from '../../lib/theme'
+import { C, fmt, GLASS, INSET } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 
 function Section({ title, subtitle, children, accent }) {
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', background: C.card }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', ...GLASS }}>
       <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: accent ? `${accent}08` : 'transparent' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
         {subtitle && <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{subtitle}</div>}
@@ -40,7 +40,7 @@ function TxRow({ tx, type, onRename, onAsk }) {
             onBlur={() => { onRename(tx.id, draft); setEditing(false) }}
             onKeyDown={e => { if (e.key === 'Enter') { onRename(tx.id, draft); setEditing(false) } if (e.key === 'Escape') setEditing(false) }}
             style={{
-              background: '#0a1828', border: `1px solid ${C.frank}`,
+              background: INSET, border: `1px solid ${C.frank}`,
               color: C.text, borderRadius: 3, padding: '3px 7px',
               fontSize: 12, outline: 'none', width: '100%',
             }}
@@ -87,11 +87,11 @@ export function Reconciliation({ onAsk, onNav }) {
   if (!bankData) {
     return (
       <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, background: C.card }}>
+        <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, ...GLASS }}>
           <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Reconciliation</div>
           <div style={{ fontSize: 13, color: C.sub }}>Match your bank transactions to customers and suppliers.</div>
         </div>
-        <div style={{ padding: '60px 24px', textAlign: 'center', background: '#0a1828' }}>
+        <div style={{ padding: '60px 24px', textAlign: 'center', background: INSET }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🏦</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>No bank statement loaded yet</div>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
@@ -122,7 +122,7 @@ export function Reconciliation({ onAsk, onNav }) {
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
 
       {/* ── Header ─────────────────────────────────────── */}
-      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, background: C.card }}>
+      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, ...GLASS }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Reconciliation</div>
@@ -138,7 +138,7 @@ export function Reconciliation({ onAsk, onNav }) {
         </div>
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: '#0a1828' }}>
+      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: INSET }}>
 
         {/* ── Summary Stats ──────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
@@ -148,7 +148,7 @@ export function Reconciliation({ onAsk, onNav }) {
             { label: 'Money Out',    value: fmt(totalOut), color: C.warn },
             { label: 'Need Review',  value: unmatchedCount, color: unmatchedCount > 0 ? C.warn : C.frank },
           ].map(s => (
-            <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: '14px 16px' }}>
+            <div key={s.label} style={{ ...GLASS, border: `1px solid ${C.border}`, borderRadius: 6, padding: '14px 16px' }}>
               <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>{s.label}</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: s.color, fontFamily: 'var(--mono)' }}>{s.value}</div>
             </div>
@@ -230,7 +230,7 @@ export function Reconciliation({ onAsk, onNav }) {
 
         {/* ── Confirm CTA ────────────────────────────── */}
         {!isConfirmed && (
-          <div style={{ padding: '18px 20px', background: C.card, border: `1px solid ${C.frank}30`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
+          <div style={{ padding: '18px 20px', ...GLASS, border: `1px solid ${C.frank}30`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4 }}>Ready to confirm?</div>
               <div style={{ fontSize: 12, color: C.sub }}>

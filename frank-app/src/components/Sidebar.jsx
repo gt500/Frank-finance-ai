@@ -1,74 +1,67 @@
-import { C, FONT_BODY, FONT_SUB } from '../lib/theme'
+import { LayoutDashboard, TrendingUp, FileBarChart, HeartPulse, Upload, Users, CreditCard, ArrowLeftRight, Plug, MessageCircle } from 'lucide-react'
+import { C, FONT_SUB } from '../lib/theme'
 import { useTenant } from '../context/TenantContext'
 import { supabase } from '../lib/supabaseClient'
 
 const NAV_ITEMS = [
-  { id: 'dashboard',  label: 'Dashboard',       icon: '▦' },
-  { id: 'cashflow',   label: 'Cash Flow',        icon: '◱', badgeKey: 'highFlags',   badgeColor: C.danger },
-  { id: 'reports',    label: 'Reports',          icon: '▤' },
-  { id: 'health',     label: 'Business Health',  icon: '◈', badgeKey: 'hScore',      badgeColor: null },
-  { id: 'documents',  label: 'Documents',        icon: '↑' },
-  { id: 'ar',         label: 'Debtors',          icon: '⊟' },
-  { id: 'ap',         label: 'Creditors',        icon: '⊞' },
-  { id: 'reconcile',  label: 'Reconciliation',   icon: '⇌', badgeKey: 'unmatched',   badgeColor: C.warn },
-  { id: 'connect',    label: 'Connections',      icon: '⊕' },
-  { id: 'chat',       label: 'Ask Zeeder',       icon: '◉' },
+  { id: 'dashboard',  label: 'Dashboard',       Icon: LayoutDashboard },
+  { id: 'cashflow',   label: 'Cash Flow',       Icon: TrendingUp, badgeKey: 'highFlags' },
+  { id: 'reports',    label: 'Reports',         Icon: FileBarChart },
+  { id: 'health',     label: 'Business Health', Icon: HeartPulse, badgeKey: 'hScore' },
+  { id: 'documents',  label: 'Documents',       Icon: Upload },
+  { id: 'ar',         label: 'Debtors',         Icon: Users },
+  { id: 'ap',         label: 'Creditors',       Icon: CreditCard },
+  { id: 'reconcile',  label: 'Reconciliation',  Icon: ArrowLeftRight, badgeKey: 'unmatched' },
+  { id: 'connect',    label: 'Connections',     Icon: Plug },
+  { id: 'chat',       label: 'Ask Zeeder',      Icon: MessageCircle },
 ]
 
 export function Sidebar({ view, onNav, onAsk }) {
   const { tenant, data, bankData, currentUser, logout, deleteAccount, canDeleteAccount, subscription, cancelSubscription } = useTenant()
   const hScore    = Math.round(data.HEALTH_CHECKS.reduce((a, h) => a + h.score, 0) / data.HEALTH_CHECKS.length)
   const highFlags = data.CASHFLOW_FLAGS.filter(f => f.severity === 'HIGH').length
-  const hColor    = hScore > 75 ? C.frank : hScore > 55 ? C.warn : C.danger
   const unmatched = bankData && !bankData.isConfirmed
     ? (bankData.credits.filter(t => !t.matchedName && !t.confirmed).length + bankData.debits.filter(t => !t.matchedName && !t.confirmed).length)
     : null
-  const badges = { highFlags, hScore, unmatched }
-  const badgeColors = { highFlags: C.danger, hScore: hColor, unmatched: C.warn }
+  const badges = { highFlags: highFlags || null, hScore, unmatched: unmatched || null }
+  const badgeColors = { highFlags: C.watch, hScore: hScore > 75 ? C.frank : C.watch, unmatched: C.gold }
 
   return (
     <>
-      <aside style={{ width: 250, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh' }}>
-        {/* Logo — gap closed, Finance OS sits directly under the wordmark */}
-        <div style={{ padding: '12px 16px 4px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}>
-          <img src="/zeeder-logo.png" alt="Zeeder AI" style={{ width: '80%', display: 'block', margin: '0 auto', marginBottom: -48 }} />
-          <div style={{ fontFamily: FONT_SUB, fontSize: 10, color: C.gold, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1, paddingBottom: 0 }}>Finance OS</div>
+      <aside className="glass" style={{ width: 252, margin: 14, marginRight: 0, height: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'hidden' }}>
+        {/* Brand — wordmark + gold Bruno Ace sub-brand, as on the Skills Hub */}
+        <div style={{ padding: '18px 18px 10px' }}>
+          <img src="/zeeder-logo.png" alt="Zeeder" style={{ width: '72%', display: 'block', marginBottom: -40 }} />
+          <div style={{ fontFamily: FONT_SUB, fontSize: 15, color: C.gold, letterSpacing: '.08em', textTransform: 'uppercase', lineHeight: 1 }}>Finance OS</div>
         </div>
 
         {/* Business card */}
-        <div style={{ padding: '10px 20px 12px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: 0.3 }}>{tenant.name}</div>
-          <div style={{ fontSize: 12, color: C.sub, marginTop: 2, letterSpacing: 0.5 }}>{tenant.sector}</div>
-          {tenant.children != null
-            ? <div style={{ fontSize: 12, color: C.dim, marginTop: 1 }}>{tenant.children} learners · {tenant.staff} staff</div>
-            : <div style={{ fontSize: 12, color: C.dim, marginTop: 1 }}>{tenant.staff} staff · {tenant.location}</div>}
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div className="blink" style={{ width: 6, height: 6, borderRadius: '50%', background: bankData ? C.frank : C.dim, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: bankData ? C.frank : C.dim, letterSpacing: 0.5 }}>{bankData ? 'Bank statement loaded' : 'No bank data yet'}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.warn, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: C.warn, letterSpacing: 0.5 }}>No accounting software</span>
-            </div>
+        <div style={{ margin: '6px 12px 8px', padding: 12, borderRadius: 12, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{tenant.name}</div>
+          <div style={{ fontSize: 12, color: C.label, marginTop: 2 }}>
+            {tenant.sector}{tenant.children != null ? ` · ${tenant.children} learners` : tenant.location ? ` · ${tenant.location}` : ''}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, color: bankData ? C.frank : C.label }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: bankData ? C.frank : C.label, boxShadow: bankData ? `0 0 10px ${C.frank}` : 'none', flexShrink: 0 }} />
+            {bankData ? 'Bank statement loaded' : 'No bank statement yet'}
           </div>
         </div>
 
-        {/* Nav — tucked up */}
-        <nav style={{ flex: 1, padding: '4px 10px', overflowY: 'auto' }}>
-          {NAV_ITEMS.map(n => {
-            const active = view === n.id
-            const badgeVal = n.badgeKey ? badges[n.badgeKey] : null
-            const badgeCol = n.badgeKey ? badgeColors[n.badgeKey] : null
+        <nav aria-label="Main" style={{ flex: 1, padding: '4px 10px', overflowY: 'auto' }}>
+          {NAV_ITEMS.map(({ id, label, Icon, badgeKey }) => {
+            const active = view === id
+            const badgeVal = badgeKey ? badges[badgeKey] : null
+            const badgeCol = badgeKey ? badgeColors[badgeKey] : null
             return (
-              <button key={n.id} onClick={() => onNav(n.id)} className="nav-item"
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 4, border: 'none',
-                  borderLeft: active ? `2px solid ${C.frank}` : '2px solid transparent', cursor: 'pointer', background: active ? C.frankMid : 'transparent',
-                  color: active ? C.frank : C.sub, fontSize: 16, fontWeight: active ? 600 : 400, marginBottom: 2, textAlign: 'left', letterSpacing: active ? 0.3 : 0 }}>
-                <span style={{ fontSize: 16, opacity: active ? 1 : 0.6, flexShrink: 0 }}>{n.icon}</span>
-                <span style={{ flex: 1 }}>{n.label}</span>
+              <button key={id} onClick={() => onNav(id)} className="nav-item" aria-current={active ? 'page' : undefined}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 42, padding: '0 12px', borderRadius: 11, marginBottom: 2, textAlign: 'left', cursor: 'pointer', fontSize: 14,
+                  border: active ? '1px solid rgba(32,229,246,0.35)' : '1px solid transparent',
+                  background: active ? 'linear-gradient(90deg, rgba(32,229,246,0.16), rgba(32,229,246,0.03))' : 'transparent',
+                  color: active ? C.frank : C.soft }}>
+                <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
+                <span style={{ flex: 1 }}>{label}</span>
                 {badgeVal != null && (
-                  <span style={{ fontSize: 12, background: `${badgeCol}18`, color: badgeCol, borderRadius: 3, padding: '1px 6px', fontWeight: 700, border: `1px solid ${badgeCol}30`, letterSpacing: 0.5 }}>{badgeVal}</span>
+                  <span className="num" style={{ fontSize: 11, color: badgeCol, background: `${badgeCol}1f`, border: `1px solid ${badgeCol}40`, borderRadius: 999, padding: '1px 7px' }}>{badgeVal}</span>
                 )}
               </button>
             )
@@ -76,7 +69,7 @@ export function Sidebar({ view, onNav, onAsk }) {
         </nav>
 
         {/* Plan footer — reflects real subscription */}
-        <div style={{ padding: '14px 20px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ minWidth: 0 }}>
@@ -84,10 +77,10 @@ export function Sidebar({ view, onNav, onAsk }) {
                 <div style={{ fontSize: 11, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email}</div>
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
-                <button onClick={logout} title="Sign out" style={{ padding: '4px 9px', borderRadius: 3, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer', letterSpacing: 0.5 }}>Sign out</button>
+                <button onClick={logout} title="Sign out" style={{ padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: C.soft, fontSize: 11, cursor: 'pointer' }}>Sign out</button>
                 {canDeleteAccount && (
                   <button onClick={async () => { if (window.confirm('Delete your account and all data? This cannot be undone.')) { const r = await deleteAccount(); if (!r.ok) window.alert(`Account not deleted: ${r.error}`) } }} title="Delete account"
-                    style={{ padding: '4px 7px', borderRadius: 3, border: `1px solid ${C.danger}30`, background: 'transparent', color: C.danger, fontSize: 11, cursor: 'pointer' }}>×</button>
+                    aria-label="Delete account" style={{ padding: '4px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: C.label, fontSize: 12, cursor: 'pointer' }}>×</button>
                 )}
               </div>
             </div>
@@ -99,7 +92,7 @@ export function Sidebar({ view, onNav, onAsk }) {
           </div>
           {subscription ? (
             <button onClick={async () => { if (window.confirm('Cancel your subscription? You keep access until the end of the paid period.')) { const r = await cancelSubscription(); if (!r.ok) onAsk(`Cancellation failed: ${r.error}`) } }}
-              style={{ width: '100%', padding: '8px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: 'transparent', color: C.danger, fontSize: 12, cursor: 'pointer', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>Cancel subscription</button>
+              className="btn-ghost" style={{ width: '100%', fontSize: 12, color: C.soft }}>Cancel subscription</button>
           ) : (
             <button onClick={async () => {
                 try {
@@ -114,7 +107,7 @@ export function Sidebar({ view, onNav, onAsk }) {
                   else onAsk(`Upgrade failed: ${data.error ?? 'unknown error'}. What should I check?`)
                 } catch (e) { onAsk(`Upgrade failed to start: ${e.message}. What should I check?`) }
               }}
-              style={{ width: '100%', padding: '8px', borderRadius: 4, border: `1px solid ${C.frank}30`, background: C.frankDim, color: C.frank, fontSize: 12, cursor: 'pointer', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>Upgrade →</button>
+              className="btn-gold" style={{ width: '100%' }}>Upgrade →</button>
           )}
         </div>
       </aside>

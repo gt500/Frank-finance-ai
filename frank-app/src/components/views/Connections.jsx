@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { C } from '../../lib/theme'
+import { C, GLASS, INSET } from '../../lib/theme'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -16,7 +16,7 @@ function StatusDot({ status }) {
 
 function CardShell({ icon, name, status, children }) {
   return (
-    <div style={{ background: C.card, borderRadius: 8, padding: '18px 20px',
+    <div style={{ ...GLASS, borderRadius: 8, padding: '18px 20px',
       border: `1px solid ${status === 'live' ? C.frank + '33' : C.border}`,
       borderLeft: `3px solid ${status === 'live' ? C.frank : status === 'error' ? C.warn : C.dim}` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -101,7 +101,7 @@ function SimplePayCard({ payrollData, payrollLoading, payrollError, simplePayCon
             <input type="password" value={keyInput} onChange={e => setKeyInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !connecting && handleConnect()}
               placeholder="Paste your SimplePay API key"
-              style={{ flex: 1, padding: '7px 10px', borderRadius: 4, border: `1px solid ${formError ? C.warn : C.border}`, background: '#0a1828', color: C.text, fontSize: 12, outline: 'none', fontFamily: 'var(--mono)' }} />
+              style={{ flex: 1, padding: '7px 10px', borderRadius: 4, border: `1px solid ${formError ? C.warn : C.border}`, background: INSET, color: C.text, fontSize: 12, outline: 'none', fontFamily: 'var(--mono)' }} />
             <button onClick={handleConnect} disabled={connecting || !keyInput.trim()}
               style={{ padding: '7px 14px', borderRadius: 4, border: `1px solid ${C.frank}33`, background: C.frankDim, color: C.frank, cursor: connecting ? 'default' : 'pointer', fontSize: 11, fontWeight: 700, opacity: connecting || !keyInput.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
               {connecting ? 'Checking…' : 'Connect'}
