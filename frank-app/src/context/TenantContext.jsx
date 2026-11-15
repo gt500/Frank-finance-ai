@@ -32,6 +32,8 @@ export function TenantProvider({ children }) {
   const [subscription, setSubscription] = useState(null)
   const [loginAttempts, setLoginAttempts] = useState({ count: 0, lockedUntil: 0 })
   const [saveError, setSaveError] = useState(null)
+  // The link in a password-reset email signs the person in with a one-purpose session; they must choose a new password first.
+  const [recovering, setRecovering] = useState(() => typeof window !== 'undefined' && /type=recovery/.test(window.location.hash))
   const tid = currentUser?.tenantId
 
   // Refs mirror the latest values so rapid edits never build on a stale render's copy.
@@ -142,7 +144,8 @@ export function TenantProvider({ children }) {
   useEffect(() => {
     // INITIAL_SESSION fires on subscribe, so this one listener covers page load too.
     // Supabase calls are deferred out of the callback (awaiting them inside it can deadlock auth-js).
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
       setTimeout(() => { loadProfileForSession(session) }, 0)
     })
     return () => listener.subscription.unsubscribe()
@@ -183,6 +186,24 @@ export function TenantProvider({ children }) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { const n = loginAttempts.count + 1; setLoginAttempts(n >= 5 ? { count: 0, lockedUntil: now + 30000 } : { count: n, lockedUntil: 0 }); return { ok: false, error: 'Invalid email or password' } }
     setLoginAttempts({ count: 0, lockedUntil: 0 }); return { ok: true }
+  }
+  async function requestPasswordReset(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: window.location.origin })
+    // Same answer whether or not the address has an account, so the form cannot be used to find out who is a customer.
+    if (error && (error.status === 429 || /rate limit|too many/i.test(error.message))) return { ok: false, error: 'Too many requests. Please wait a few minutes and try again.' }
+    if (error) return { ok: false, error: "Couldn't send the email. Please try again." }
+    return { ok: true }
+  }
+  async function updatePassword(password) {
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) return { ok: false, error: error.message }
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* the address bar is cosmetic */ }
+    setRecovering(false)
+    return { ok: true }
+  }
+  async function cancelRecovery() {
+    await supabase.auth.signOut(); resetWorkspace(); setRecovering(false)
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* cosmetic */ }
   }
   async function logout() {
     // Give unsaved changes one last chance before the queue is dropped.
@@ -267,6 +288,7 @@ export function TenantProvider({ children }) {
       tenant, data: mergedData, tenantError, saveError, retrySave: () => saveQueueRef.current.retry(), systemPrompt: tenant?.systemPrompt || '',
       activeTenantId: tid, currentUser, authLoading, subscription,
       login, logout, registerAccount, cancelSubscription, deleteAccount,
+      recovering, requestPasswordReset, updatePassword, cancelRecovery,
       canDeleteAccount: !!tenant && !TENANTS.some(t => t.id === tenant.id),
       bankData, loadBankStatement, updateEntityName, confirmBankReconciliation, clearBankData,
       importDebtors: r => setImport('DEBTORS', r), importCreditors: r => setImport('CREDITORS', r),

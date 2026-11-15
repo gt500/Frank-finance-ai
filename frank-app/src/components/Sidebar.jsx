@@ -30,7 +30,7 @@ export function Sidebar({ view, onNav, onAsk }) {
 
   return (
     <>
-      <aside className="glass" style={{ width: 252, margin: 14, marginRight: 0, height: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'hidden' }}>
+      <aside className="glass" style={{ width: 252, margin: 14, marginRight: 0, height: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         {/* Brand — wordmark + gold Bruno Ace sub-brand, as on the Skills Hub */}
         <div style={{ padding: '18px 18px 10px' }}>
           <img src="/zeeder-logo.png" alt="Zeeder" style={{ width: '72%', display: 'block', marginBottom: -40 }} />
@@ -49,7 +49,7 @@ export function Sidebar({ view, onNav, onAsk }) {
           </div>
         </div>
 
-        <nav aria-label="Main" style={{ flex: 1, padding: '4px 10px', overflowY: 'auto' }}>
+        <nav aria-label="Main" style={{ flex: '1 0 auto', padding: '4px 10px' }}>
           {NAV_ITEMS.map(({ id, label, Icon, badgeKey }) => {
             const active = view === id
             const badgeVal = badgeKey ? badges[badgeKey] : null
@@ -89,13 +89,13 @@ export function Sidebar({ view, onNav, onAsk }) {
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, textTransform: 'uppercase' }}>
-              {subscription ? `${subscription.plan} Plan · R ${(subscription.amount_cents / 100).toLocaleString('en-ZA')}/mo` : `Trial — ${currentUser?.trialDaysLeft ?? 0} days left`}
+              {subscription ? `${subscription.plan} Plan · R ${(subscription.amount_cents / 100).toLocaleString('en-ZA')}/mo` : tenant?.demo ? 'Demo workspace' : `Trial — ${currentUser?.trialDaysLeft ?? 0} days left`}
             </div>
           </div>
           {subscription ? (
             <button onClick={async () => { if (window.confirm('Cancel your subscription? You keep access until the end of the paid period.')) { const r = await cancelSubscription(); if (!r.ok) onAsk(`Cancellation failed: ${r.error}`) } }}
               className="btn-ghost" style={{ width: '100%', fontSize: 12, color: C.soft }}>Cancel subscription</button>
-          ) : (
+          ) : tenant?.demo ? null : (
             <button onClick={async () => {
                 try {
                   const { data: { session } } = await supabase.auth.getSession()

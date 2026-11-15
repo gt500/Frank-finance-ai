@@ -37,6 +37,7 @@ export function Reports({ onAsk }) {
   const revDelta = prev ? m.rev - prev.rev : null
   const expDelta = prev ? m.exp - prev.exp : null
   const margin   = m.rev > 0 ? ((m.net / m.rev) * 100).toFixed(1) : '0.0'
+  const netText = `${m.net < 0 ? '-' : ''}${fmt(Math.abs(m.net))}`
 
   return (
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -139,8 +140,9 @@ export function Reports({ onAsk }) {
               <div style={{ fontSize: 11, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 }}>
                 {m.net >= 0 ? 'Profit' : 'Loss'}
               </div>
-              <div style={{ fontSize: 38, fontWeight: 800, color: profitColor, fontFamily: 'var(--mono)', lineHeight: 1 }}>
-                {m.net < 0 ? '-' : ''}{fmt(Math.abs(m.net))}
+              {/* One line always: the type shrinks as the amount grows, so it never wraps or spills out of the box. */}
+              <div style={{ fontSize: netText.length > 11 ? 20 : netText.length > 9 ? 24 : netText.length > 7 ? 30 : 36, fontWeight: 800, color: profitColor, fontFamily: 'var(--mono)', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                {netText}
               </div>
               <div style={{ width: '80%', height: 1, background: C.border, margin: '14px 0' }} />
               <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.6 }}>

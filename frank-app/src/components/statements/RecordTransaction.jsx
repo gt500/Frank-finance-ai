@@ -28,7 +28,7 @@ export function RecordTransaction({ accounts, busy, error, onPost, onCancel }) {
   const [problem, setProblem] = useState('')
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const nameOf = (code) => accounts.find((a) => a.code === code)?.name ?? code
-  const categories = accounts.filter((a) => a.type === 'expense' || a.code === '1200' || a.code === '1500')
+  const categories = accounts.filter((a) => a.type === 'expense' || a.code === '1200')
 
   let preview = null
   try { preview = build(kind, f) } catch { preview = null }

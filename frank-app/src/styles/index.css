@@ -78,7 +78,7 @@ input { font-family: var(--font); }
 }
 .ttl { margin: 0; font-size: 13px; font-weight: 400; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
 .tag { font-family: var(--font-logo); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--frank); }
-.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 .btn-gold { min-height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--gold); background: rgba(193,176,129,0.10); color: #e2c98f; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
 .btn-gold:hover { background: rgba(193,176,129,0.18); }
@@ -95,4 +95,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .app-bg::before, .app-bg::after { display: none; }
   .app-bg, .app-bg * { overflow: visible !important; height: auto !important; }
   .app-bg, .app-bg > * { position: static !important; }
+}
+
+/* Login: brand panel beside the form on a desktop, stacked on a phone. */
+.login-split { display: flex; }
+@media (max-width: 860px) {
+  .login-split { flex-direction: column; }
+  .login-brand { padding: 28px 20px 8px !important; border-right: none !important; }
+  .login-brand > :not(:first-child) { display: none !important; }
+  .login-logo { height: 120px !important; }
+  .login-brand > div:first-child { margin-bottom: 0 !important; }
+  .login-form { width: 100% !important; padding: 24px 20px 40px !important; box-sizing: border-box; }
+}
+
+/* The app fills the window and never scrolls as a whole: only the sidebar and the content area scroll, and 'clip'
+   (unlike 'hidden') cannot be scrolled out of place by focus or find-in-page, which left the top unreachable. */
+.app-shell { height: 100vh; height: 100dvh; overflow: hidden; overflow: clip; }
+.app-main { overflow: hidden; overflow: clip; }
+/* A short window gives the content more room: a tighter header. */
+@media (max-height: 560px) {
+  .app-header { padding: 10px 22px 6px !important; }
+  .app-header h1 { font-size: 22px !important; margin-top: 2px !important; }
 }

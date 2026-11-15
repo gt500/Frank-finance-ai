@@ -38,9 +38,10 @@ export const FONT_BODY = "'Century Gothic', 'Trebuchet MS', 'Gill Sans MT', syst
 export const FONT_BRAND = "'Century Gothic', 'Trebuchet MS', system-ui, sans-serif"
 export const FONT_SUB = "'Bruno Ace', 'Century Gothic', sans-serif"  // sub-branding label
 
-export const fmt  = n => `R ${Number(n).toLocaleString('en-ZA')}`
-export const fmtK = n => n >= 1000 ? `R ${(n/1000).toFixed(0)}k` : `R ${n}`
-export const fmtM = n => n >= 1000000 ? `R ${(n/1000000).toFixed(1)}M` : fmtK(n)
+// A no-break space after the R (and the one en-ZA puts between digit groups) keeps an amount on one line.
+export const fmt  = n => `R\u00A0${Number(n).toLocaleString('en-ZA')}`
+export const fmtK = n => n >= 1000 ? `R\u00A0${(n/1000).toFixed(0)}k` : `R\u00A0${n}`
+export const fmtM = n => n >= 1000000 ? `R\u00A0${(n/1000000).toFixed(1)}M` : fmtK(n)
 
 // Glass panel for inline-styled containers (same recipe as the .glass class in index.css).
 export const GLASS = {

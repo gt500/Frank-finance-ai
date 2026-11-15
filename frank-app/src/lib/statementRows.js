@@ -30,6 +30,10 @@ export function statementViews(s, { periodLabel, priorLabel = 'Previous period' 
     ] : []),
     ...(i.expenses.length ? [row('heading', 'Operating expenses'), ...i.expenses.map((l) => row('line', l.name, incomeValues(l))), row('total', 'Total operating expenses', incomeValues(i.totalExpenses))] : []),
     row('grand', 'Profit for the period (before income tax)', incomeValues(i.profit)),
+    ...(i.tax ? [
+      row('line', `Estimated income tax at ${String(i.tax.ratePercent).replace('.', ',')}% (estimate, not in your books)`, incomeValues({ cents: -i.tax.cents, priorCents: -(i.tax.priorCents ?? 0) })),
+      row('total', 'Estimated profit after income tax', incomeValues({ cents: i.tax.afterCents, priorCents: i.tax.priorAfterCents })),
+    ] : []),
   ]
 
   // ── Statement of financial position ──
@@ -66,9 +70,9 @@ export function statementViews(s, { periodLabel, priorLabel = 'Previous period' 
   ]
 
   return {
-    income: { title: 'Income statement', subtitle: `For ${periodLabel}`, columns: hasPrior ? [periodLabel, priorLabel, 'Change'] : [periodLabel], rows: incomeRows },
-    balance: { title: 'Statement of financial position', subtitle: `As at ${asAt}`, columns: [asAt, openingDate], rows: balanceRows },
-    cashFlow: { title: 'Statement of cash flows', subtitle: `For ${periodLabel}`, columns: ['Amount'], rows: cashRows },
+    income: { title: 'Income statement', subtitle: `For ${periodLabel}`, columns: hasPrior ? [periodLabel, priorLabel, 'Change'] : [periodLabel], rows: incomeRows, footnote: s.accountantNotes },
+    balance: { title: 'Statement of financial position', subtitle: `As at ${asAt}`, columns: [asAt, openingDate], rows: balanceRows, footnote: s.accountantNotes },
+    cashFlow: { title: 'Statement of cash flows', subtitle: `For ${periodLabel}`, columns: ['Amount'], rows: cashRows, footnote: s.accountantNotes },
     equity: { title: 'Statement of changes in equity', subtitle: `For ${periodLabel}`, columns: ['Owner equity', 'Retained earnings', 'Total'], rows: equityRows },
     trial: { title: 'Trial balance', subtitle: `As at ${asAt}`, columns: ['Debit', 'Credit'], rows: trialRows },
   }
