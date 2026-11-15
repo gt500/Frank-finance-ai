@@ -1,0 +1,37 @@
+# Edge function gateway auth, pinned in git so a plain `supabase functions deploy` can't flip it.
+# verify_jwt = true  → the gateway rejects requests without a valid Supabase JWT.
+# verify_jwt = false → the function does its own auth (or none is possible).
+project_id = "ffmlvksocucfidaclzih"
+
+# PayGate's server POSTs here with no JWT; the function re-queries PayGate for the truth.
+[functions.paygate-notify]
+verify_jwt = false
+
+# Billing return page; the function checks the user's JWT itself.
+[functions.paygate-status]
+verify_jwt = false
+
+# Cron-only. Its in-code service_role check relies on the gateway having verified the JWT signature.
+[functions.paygate-charge]
+verify_jwt = true
+
+[functions.paygate-initiate]
+verify_jwt = true
+
+[functions.paygate-cancel]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.chat-message]
+verify_jwt = true
+
+[functions.extract-document]
+verify_jwt = true
+
+[functions.simplepay-proxy]
+verify_jwt = true
+
+[functions.wonderland-proxy]
+verify_jwt = true

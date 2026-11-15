@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { C, fmt } from '../../lib/theme'
+import { C, fmt, GLASS } from '../../lib/theme'
 import { Card, SLabel, StatBox, Badge, ConfBadge, Spinner, Empty } from '../shared'
 import { extractFromDocument } from '../../hooks/useFrank'
 import { useTenant } from '../../context/TenantContext'
@@ -8,9 +8,9 @@ const DOC_TYPES = [
   { id:'debtor_age',       label:'Debtor Age Analysis',  icon:'📊', category:'debtor',   color:C.warn,   desc:'Click to upload your debtor age analysis. PDF or CSV from any accounting system.' },
   { id:'customer_invoice', label:'Customer Invoice(s)',  icon:'🧾', category:'debtor',   color:C.warn,   desc:'Click to upload customer invoices. Zeeder extracts who owes what and when it\'s due.' },
   { id:'customer_stmt',    label:'Customer Statement',  icon:'📋', category:'debtor',   color:C.warn,   desc:'Click to upload a customer statement showing their outstanding balance.' },
-  { id:'supplier_invoice', label:'Supplier Invoice',    icon:'📬', category:'creditor', color:C.danger, desc:'Click to upload a supplier invoice. Zeeder extracts what you owe and when.' },
-  { id:'supplier_stmt',    label:'Supplier Statement',  icon:'📑', category:'creditor', color:C.danger, desc:'Click to upload a supplier statement showing all outstanding invoices.' },
-  { id:'creditor_age',     label:'Creditor Age Analysis',icon:'📉', category:'creditor', color:C.danger, desc:'Click to upload your creditor age analysis — what you owe all suppliers.' },
+  { id:'supplier_invoice', label:'Supplier Invoice',    icon:'📬', category:'creditor', color:C.watch, desc:'Click to upload a supplier invoice. Zeeder extracts what you owe and when.' },
+  { id:'supplier_stmt',    label:'Supplier Statement',  icon:'📑', category:'creditor', color:C.watch, desc:'Click to upload a supplier statement showing all outstanding invoices.' },
+  { id:'creditor_age',     label:'Creditor Age Analysis',icon:'📉', category:'creditor', color:C.watch, desc:'Click to upload your creditor age analysis — what you owe all suppliers.' },
   { id:'bank_statement',   label:'Bank Statement',      icon:'🏦', category:'bank',     color:C.frank,  desc:'Use CSV export from your bank\'s online portal — faster and more reliable than PDF.' },
   { id:'payroll_report',   label:'Payroll Report',      icon:'👥', category:'payroll',  color:C.frank,  desc:'Click to upload your SimplePay or payroll export. Zeeder extracts salary totals and PAYE.' },
 ]
@@ -98,7 +98,7 @@ export function Documents({ onAsk, onNav }) {
                           <div style={{ fontSize: 11, color: C.sub }}>{bankData.periodStart} to {bankData.periodEnd} · {(bankData.credits?.length || 0) + (bankData.debits?.length || 0)} transactions</div>
                         </div>
                       </div>
-                      <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: `${C.danger}08`, color: C.danger, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.watch}30`, background: `${C.watch}08`, color: C.watch, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                         ✕ Clear
                       </button>
                     </div>
@@ -112,7 +112,7 @@ export function Documents({ onAsk, onNav }) {
                           <div style={{ fontSize: 11, color: C.sub }}>{tenantImport.DEBTORS.length} row{tenantImport.DEBTORS.length !== 1 ? 's' : ''} from spreadsheet</div>
                         </div>
                       </div>
-                      <button onClick={clearImportedDebtors} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: `${C.danger}08`, color: C.danger, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      <button onClick={clearImportedDebtors} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.watch}30`, background: `${C.watch}08`, color: C.watch, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                         ✕ Clear
                       </button>
                     </div>
@@ -126,7 +126,7 @@ export function Documents({ onAsk, onNav }) {
                           <div style={{ fontSize: 11, color: C.sub }}>{tenantImport.CREDITORS.length} row{tenantImport.CREDITORS.length !== 1 ? 's' : ''} from spreadsheet</div>
                         </div>
                       </div>
-                      <button onClick={clearImportedCreditors} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.danger}30`, background: `${C.danger}08`, color: C.danger, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      <button onClick={clearImportedCreditors} style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.watch}30`, background: `${C.watch}08`, color: C.watch, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                         ✕ Clear
                       </button>
                     </div>
@@ -154,7 +154,7 @@ export function Documents({ onAsk, onNav }) {
                 key={t.id}
                 onClick={() => { fileRef.current.click(); setActiveType(t.id); setFiles([]) }}
                 style={{
-                  background: C.card, borderRadius: 7, padding: '12px',
+                  ...GLASS, borderRadius: 7, padding: '12px',
                   border: `1px solid ${activeType === t.id ? t.color + '66' : C.border}`,
                   borderLeft: `3px solid ${activeType === t.id ? t.color : C.border}`,
                   cursor: 'pointer',
@@ -254,7 +254,7 @@ export function Documents({ onAsk, onNav }) {
                     <div style={{ fontSize: 12, fontWeight: 700 }}>{r.file}</div>
                     {r.data?.document_type && <div style={{ fontSize: 9, color: C.sub, marginTop: 1 }}>{r.data.document_type}</div>}
                   </div>
-                  <Badge label={r.error ? 'FAILED' : 'EXTRACTED ✓'} color={r.error ? C.danger : C.frank} />
+                  <Badge label={r.error ? 'FAILED' : 'EXTRACTED ✓'} color={r.error ? C.watch : C.frank} />
                   <button
                     onClick={() => setResults(prev => prev.filter((_, i) => i !== ri))}
                     title="Remove this result"
@@ -262,7 +262,7 @@ export function Documents({ onAsk, onNav }) {
                     ✕
                   </button>
                 </div>
-                {r.error && <div style={{ padding: '8px 12px', background: `${C.danger}10`, border: `1px solid ${C.danger}33`, borderRadius: 4, fontSize: 10, color: C.danger }}>{r.error}</div>}
+                {r.error && <div style={{ padding: '8px 12px', background: `${C.watch}10`, border: `1px solid ${C.watch}33`, borderRadius: 4, fontSize: 10, color: C.watch }}>{r.error}</div>}
                 {!r.error && r.data?.notes && <div style={{ padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}33`, borderRadius: 4, fontSize: 10, color: C.sub, marginBottom: 8 }}><strong style={{ color: C.amber }}>Note: </strong>{r.data.notes}</div>}
                 {!r.error && <ResultTable data={r.data} category={r.category} onAsk={onAsk} />}
                 {!r.error && r.category === 'bank' && r.data?.transactions?.length > 0 && (
@@ -303,17 +303,17 @@ function ResultTable({ data, category, onAsk }) {
       <div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
           <StatBox label="Records" value={data.debtors.length} color={C.warn} />
-          <StatBox label="Total Outstanding" value={fmt(data.total_outstanding || 0)} color={C.danger} />
-          <StatBox label="High Risk" value={data.debtors.filter(d => d.days_overdue >= 60).length} color={C.danger} sub="60+ days overdue" />
+          <StatBox label="Total Outstanding" value={fmt(data.total_outstanding || 0)} color={C.watch} />
+          <StatBox label="High Risk" value={data.debtors.filter(d => d.days_overdue >= 60).length} color={C.watch} sub="60+ days overdue" />
         </div>
         <TableGrid headers={['Client', 'Reference', 'Amount', 'Due Date', 'Days Overdue', 'Confidence']}>
           {data.debtors.map((d, i) => (
             <TableRow key={i} cells={[
               <span style={{ fontWeight: 600, color: C.warn }}>{d.name}</span>,
               <span style={{ fontSize: 9, color: C.muted, fontFamily: 'var(--mono)' }}>{d.reference || '—'}</span>,
-              <span style={{ fontFamily: 'var(--mono)', color: d.amount > 5000 ? C.danger : C.text, fontWeight: 600 }}>{fmt(d.amount)}</span>,
+              <span style={{ fontFamily: 'var(--mono)', color: d.amount > 5000 ? C.watch : C.text, fontWeight: 600 }}>{fmt(d.amount)}</span>,
               <span style={{ fontSize: 9, color: C.sub }}>{d.due_date || '—'}</span>,
-              <span style={{ fontSize: 10, fontWeight: 700, color: d.days_overdue >= 60 ? C.danger : d.days_overdue >= 30 ? C.warn : C.frank }}>{d.days_overdue > 0 ? `${d.days_overdue}d` : 'Current'}</span>,
+              <span style={{ fontSize: 10, fontWeight: 700, color: d.days_overdue >= 60 ? C.watch : d.days_overdue >= 30 ? C.warn : C.frank }}>{d.days_overdue > 0 ? `${d.days_overdue}d` : 'Current'}</span>,
               <ConfBadge value={d.confidence} />,
             ]} />
           ))}
@@ -326,18 +326,18 @@ function ResultTable({ data, category, onAsk }) {
     return (
       <div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
-          <StatBox label="Records" value={data.creditors.length} color={C.danger} />
-          <StatBox label="Total Owed" value={fmt(data.total_owed || 0)} color={C.danger} />
-          <StatBox label="Overdue" value={data.creditors.filter(c => c.overdue || c.days_until_due < 0).length} color={C.danger} sub="suppliers" />
+          <StatBox label="Records" value={data.creditors.length} color={C.watch} />
+          <StatBox label="Total Owed" value={fmt(data.total_owed || 0)} color={C.watch} />
+          <StatBox label="Overdue" value={data.creditors.filter(c => c.overdue || c.days_until_due < 0).length} color={C.watch} sub="suppliers" />
         </div>
         <TableGrid headers={['Supplier', 'Reference', 'Amount', 'Due Date', 'Status', 'Confidence']}>
           {data.creditors.map((c, i) => (
             <TableRow key={i} cells={[
-              <span style={{ fontWeight: 600, color: C.danger }}>{c.supplier}</span>,
+              <span style={{ fontWeight: 600, color: C.watch }}>{c.supplier}</span>,
               <span style={{ fontSize: 9, color: C.muted, fontFamily: 'var(--mono)' }}>{c.reference || '—'}</span>,
-              <span style={{ fontFamily: 'var(--mono)', fontWeight: 600, color: (c.overdue || c.days_until_due < 0) ? C.danger : C.text }}>{fmt(c.amount)}</span>,
+              <span style={{ fontFamily: 'var(--mono)', fontWeight: 600, color: (c.overdue || c.days_until_due < 0) ? C.watch : C.text }}>{fmt(c.amount)}</span>,
               <span style={{ fontSize: 9, color: C.sub }}>{c.due_date || '—'}</span>,
-              <Badge label={(c.overdue || c.days_until_due < 0) ? 'OVERDUE' : 'OK'} color={(c.overdue || c.days_until_due < 0) ? C.danger : C.frank} size="sm" />,
+              <Badge label={(c.overdue || c.days_until_due < 0) ? 'OVERDUE' : 'OK'} color={(c.overdue || c.days_until_due < 0) ? C.watch : C.frank} size="sm" />,
               <ConfBadge value={c.confidence} />,
             ]} />
           ))}
@@ -352,7 +352,7 @@ function ResultTable({ data, category, onAsk }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 10 }}>
           <StatBox label="Transactions" value={data.transactions.length} color={C.frank} />
           <StatBox label="Total Credits" value={fmt(data.total_credits || 0)} color={C.frank} />
-          <StatBox label="Total Debits" value={fmt(data.total_debits || 0)} color={C.danger} />
+          <StatBox label="Total Debits" value={fmt(data.total_debits || 0)} color={C.watch} />
           <StatBox label="Closing Balance" value={fmt(data.closing_balance || 0)} color={C.blue} />
         </div>
         <TableGrid headers={['Date', 'Description', 'Debit', 'Credit', 'Category']}>
@@ -360,7 +360,7 @@ function ResultTable({ data, category, onAsk }) {
             <TableRow key={i} cells={[
               <span style={{ fontSize: 9, color: C.sub, fontFamily: 'var(--mono)' }}>{t.date}</span>,
               <span style={{ fontSize: 10, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.description}</span>,
-              <span style={{ fontFamily: 'var(--mono)', color: t.debit ? C.danger : C.muted, fontSize: 10 }}>{t.debit ? fmt(t.debit) : '—'}</span>,
+              <span style={{ fontFamily: 'var(--mono)', color: t.debit ? C.watch : C.muted, fontSize: 10 }}>{t.debit ? fmt(t.debit) : '—'}</span>,
               <span style={{ fontFamily: 'var(--mono)', color: t.credit ? C.frank : C.muted, fontSize: 10 }}>{t.credit ? fmt(t.credit) : '—'}</span>,
               <Badge label={t.category || 'Unknown'} color={C.purple} size="sm" />,
             ]} />
@@ -405,7 +405,7 @@ function ResultTable({ data, category, onAsk }) {
 
 function AllRecordsTable({ records, results, onAsk }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+    <div style={{ ...GLASS, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
       {records.slice(0, 50).map((rec, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${C.muted}22` }}>
           <div style={{ flex: 1, fontSize: 10, color: C.text }}>{rec.name || rec.supplier || rec.description || '—'}</div>
@@ -419,7 +419,7 @@ function AllRecordsTable({ records, results, onAsk }) {
 
 function TableGrid({ headers, children }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 5, overflow: 'hidden' }}>
+    <div style={{ ...GLASS, border: `1px solid ${C.border}`, borderRadius: 5, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${headers.length},1fr)`, borderBottom: `1px solid ${C.border}` }}>
         {headers.map(h => <div key={h} style={{ padding: '6px 10px', fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' }}>{h}</div>)}
       </div>

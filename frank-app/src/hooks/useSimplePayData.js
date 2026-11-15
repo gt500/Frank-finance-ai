@@ -1,26 +1,22 @@
 import { useState, useEffect } from 'react'
 import { simplePayApi } from '../lib/simplePayApi'
-
-export function useSimplePayData(apiKey) {
-  const [data,    setData]    = useState(null)
+export function useSimplePayData(connected) {
+  const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
-
+  const [error, setError] = useState(null)
   useEffect(() => {
-    if (!apiKey) { setData(null); setError(null); setLoading(false); return }
-
-    setLoading(true)
-    Promise.all([
-      simplePayApi.employees(apiKey),
-      simplePayApi.payRuns(apiKey),
-    ])
+    if (!connected) { setData(null); setError(null); setLoading(false); return }
+    let cancelled = false
+    setLoading(true); setError(null)
+    Promise.all([simplePayApi.employees(), simplePayApi.payRuns()])
       .then(([employees, payRuns]) => {
-        if (employees || payRuns) setData({ employees, payRuns })
-        else setError('SimplePay not connected — check API key')
+        if (cancelled) return
+        const failure = employees?.error || payRuns?.error
+        if (failure) { setData(null); setError(failure) } else setData({ employees, payRuns })
       })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [apiKey])
-
+      .catch(err => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [connected])
   return { data, loading, error }
 }

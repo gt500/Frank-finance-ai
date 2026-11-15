@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { C, fmt } from '../../lib/theme'
+import { C, fmt, GLASS } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 import { SpreadsheetImporter } from '../SpreadsheetImporter'
 
 const riskColor = (days) =>
-  days > 90 ? C.danger : days > 30 ? C.warn : C.frank
+  days > 90 ? C.watch : days > 30 ? C.warn : C.frank
 
 const riskLabel = (days) =>
   days > 90 ? 'HIGH' : days > 30 ? 'MED' : 'LOW'
@@ -84,7 +84,7 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
             <button onClick={() => onNav('reconcile')} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${C.frank}30`, background: 'transparent', color: C.frank, fontSize: 11, cursor: 'pointer' }}>
               View Reconciliation
             </button>
-            <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${C.danger}30`, background: 'transparent', color: C.danger, fontSize: 11, cursor: 'pointer' }}>
+            <button onClick={clearBankData} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${C.watch}30`, background: 'transparent', color: C.watch, fontSize: 11, cursor: 'pointer' }}>
               ✕ Clear statement
             </button>
           </div>
@@ -106,7 +106,7 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
       {/* Header strip */}
       <div style={{ display: 'flex', gap: 14 }}>
         <div style={{
-          flex: 1, background: C.card, border: `1px solid ${C.border}`,
+          flex: 1, ...GLASS, border: `1px solid ${C.border}`,
           borderTop: `2px solid ${C.warn}`, borderRadius: 6, padding: '16px 18px',
         }}>
           <div style={{ fontSize: 11, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
@@ -121,13 +121,13 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
         </div>
 
         <div style={{
-          flex: 1, background: C.card, border: `1px solid ${C.border}`,
-          borderTop: `2px solid ${C.danger}`, borderRadius: 6, padding: '16px 18px',
+          flex: 1, ...GLASS, border: `1px solid ${C.border}`,
+          borderTop: `2px solid ${C.watch}`, borderRadius: 6, padding: '16px 18px',
         }}>
           <div style={{ fontSize: 11, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
             High Risk (&gt;90 days)
           </div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: C.danger, fontFamily: 'var(--mono)' }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: C.watch, fontFamily: 'var(--mono)' }}>
             {loading ? '…' : fmt(rows.filter(r => (r.days_overdue ?? r.daysOverdue ?? 0) > 90).reduce((s, r) => s + (r.amount ?? r.outstanding ?? 0), 0))}
           </div>
           <div style={{ fontSize: 12, color: C.sub, marginTop: 6 }}>
@@ -136,7 +136,7 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
         </div>
 
         <div style={{
-          flex: 1, background: C.card, border: `1px solid ${C.border}`,
+          flex: 1, ...GLASS, border: `1px solid ${C.border}`,
           borderTop: `2px solid ${C.frank}`, borderRadius: 6, padding: '16px 18px',
           display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10,
         }}>
@@ -168,7 +168,7 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
       )}
 
       {/* Table */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ ...GLASS, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
         {/* Column headers */}
         <div style={{
           display: 'grid',
@@ -189,7 +189,7 @@ export function Debtors({ onAsk, liveData, loading, error, onNav }) {
         )}
 
         {error && (
-          <div style={{ padding: 24, color: C.danger, fontSize: 13 }}>
+          <div style={{ padding: 24, color: C.watch, fontSize: 13 }}>
             Could not load data: {error}
           </div>
         )}

@@ -1,7 +1,18 @@
 // Replaces the direct browser -> api.anthropic.com call in
 // extractFromDocument (useFrank.js). Same auth requirement as chat-message.
 import { createClient } from "npm:@supabase/supabase-js@2"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders, withCors } from "../_shared/cors.ts"
+import { relayAnthropic } from "../_shared/anthropic.ts"
+
+// 20 MB file → ~27 MB as base64 in JSON. Text inputs are trimmed to 8k chars by the client.
+const MAX_BODY_CHARS = 30_000_000, MAX_TEXT_CHARS = 20_000, MAX_BLOCKS = 4
+const BLOCK_TYPES = new Set(["text", "image", "document"])
+// The client sends either the prompt+text as one string, or a few content blocks (prompt + file).
+function isValidContent(c: unknown): boolean {
+  if (typeof c === "string") return c.length > 0 && c.length <= MAX_TEXT_CHARS
+  return Array.isArray(c) && c.length > 0 && c.length <= MAX_BLOCKS &&
+    c.every((b) => BLOCK_TYPES.has(b?.type) && (b.type !== "text" || (typeof b.text === "string" && b.text.length <= MAX_TEXT_CHARS)))
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -10,7 +21,7 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 // 503 from Anthropic's edge instead of a clean 401. Seen this exact failure.
 const ANTHROPIC_API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim()
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
@@ -21,12 +32,21 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await admin.auth.getUser(token)
   if (userErr || !userData?.user) return json({ error: "Invalid session" }, 401)
 
+  const { checkEntitlement } = await import("../_shared/entitlement.ts")
+  const ent = await checkEntitlement(userData.user.id)
+  if (!ent.ok) return json({ error: ent.reason }, 402)
+
   try {
     // messageContent is whatever useFrank.js already built (string, or the
     // Anthropic content-block array for images/PDFs) — this function is a
     // pure pass-through proxy, not a re-implementation of the prompt logic.
-    const { messageContent } = await req.json()
-    if (!messageContent) return json({ error: "messageContent required" }, 400)
+    if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_CHARS) return json({ error: "File too large — maximum is 20 MB." }, 413)
+    const raw = await req.text()
+    if (raw.length > MAX_BODY_CHARS) return json({ error: "File too large — maximum is 20 MB." }, 413)
+    let body
+    try { body = JSON.parse(raw) } catch { return json({ error: "Invalid request." }, 400) }
+    const messageContent = body?.messageContent
+    if (!isValidContent(messageContent)) return json({ error: "Unsupported document content." }, 400)
 
     const callApi = () =>
       fetch("https://api.anthropic.com/v1/messages", {
@@ -43,34 +63,22 @@ Deno.serve(async (req) => {
         }),
       })
 
+    // No server-side sleep on 429: the browser times out at 30s anyway, and a sleeping
+    // worker is wasted capacity. relayAnthropic tells the user to retry in a minute.
     let res = await callApi()
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 65000))
-      res = await callApi()
-    } else if (res.status === 503 && !res.headers.get("request-id")) {
+    if (res.status === 503 && !res.headers.get("request-id")) {
       // A bare Cloudflare 503 (no request-id — never reached Anthropic's
       // app) has been observed on some edge PoPs. It's transient per-PoP,
       // so one retry usually lands on a healthy route.
       res = await callApi()
     }
 
-    const raw = await res.text()
-    let data
-    try {
-      data = JSON.parse(raw)
-    } catch {
-      console.error("Anthropic returned non-JSON:", res.status, raw.slice(0, 500))
-      return json({ error: `Anthropic returned an unexpected response (HTTP ${res.status}): ${raw.slice(0, 200) || '(empty body)'}` }, 502)
-    }
-
-    if (!res.ok) return json({ error: data?.error?.message ?? `API error ${res.status}` }, res.status)
-
-    return json(data)
+    return await relayAnthropic(res)
   } catch (err) {
     console.error(err)
-    return json({ error: String(err) }, 500)
+    return json({ error: "Zeeder couldn't read this document right now — please try again." }, 500)
   }
-})
+}))
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

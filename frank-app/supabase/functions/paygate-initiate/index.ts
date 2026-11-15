@@ -7,17 +7,18 @@
 // row for an arbitrary tenant_id and trigger real PayGate API calls.
 import { createClient } from "npm:@supabase/supabase-js@2"
 import { initiateWebPayment } from "../_shared/paygate.ts"
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders, withCors } from "../_shared/cors.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const APP_URL = Deno.env.get("APP_URL")! // e.g. https://app.zeederfinance.co.za
 
 const PLANS: Record<string, number> = {
+  starter: 49900, // R499.00 in cents
   growth: 99900, // R999.00 in cents
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders })
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
@@ -39,6 +40,14 @@ Deno.serve(async (req) => {
     const { plan, first_name, last_name } = await req.json()
     const amountCents = PLANS[plan]
     if (!amountCents) return json({ error: `Unknown plan: ${plan}` }, 400)
+
+    const { data: existing, error: existingErr } = await supabase.from("subscriptions").select("id").eq("tenant_id", profile.tenant_id).eq("status", "active").maybeSingle()
+    if (existingErr) throw existingErr
+    if (existing) return json({ error: "You already have an active subscription." }, 409)
+    // An older checkout page may still be paid, so mark it superseded (paygate-notify can still
+    // settle it) rather than cancelled. The one-pending-per-tenant index blocks concurrent clicks.
+    const { error: supersedeErr } = await supabase.from("subscriptions").update({ status: "superseded" }).eq("tenant_id", profile.tenant_id).eq("status", "pending")
+    if (supersedeErr) throw supersedeErr
 
     const tenant_id = profile.tenant_id
     const email = profile.email
@@ -64,14 +73,16 @@ Deno.serve(async (req) => {
       pay_request_id: payRequestId,
       merchant_order_id: merchantOrderId,
     })
+    // 23505: another Upgrade click won the race. Its page is the live one; this one is never handed out.
+    if (error?.code === "23505") return json({ error: "A checkout is already in progress — please use the open payment page or try again." }, 409)
     if (error) throw error
 
     return json({ redirect_url: redirectUrl, pay_request_id: payRequestId })
   } catch (err) {
     console.error(err)
-    return json({ error: String(err) }, 500)
+    return json({ error: "Could not start checkout right now — please try again." }, 500)
   }
-})
+}))
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { C, fmt, FONT_SUB } from '../lib/theme'
+import { supabase } from '../lib/supabaseClient'
 
 // PayGate redirects the browser here after the hosted page completes.
 // It appends PAY_REQUEST_ID (and other fields) as query params on the
@@ -27,10 +28,13 @@ export function BillingReturn() {
 
     async function poll() {
       try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) { if (!cancelled) setState('failed'); return }
         const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-status?pay_request_id=${encodeURIComponent(payRequestId)}`
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-status?pay_request_id=${encodeURIComponent(payRequestId)}`,
+          { headers: { Authorization: `Bearer ${session.access_token}` } }
         )
-        const data = await res.json()
+        const data = res.ok ? await res.json() : {}
         if (cancelled) return
 
         if (data.status === 'active') {

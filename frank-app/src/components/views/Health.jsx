@@ -1,4 +1,5 @@
-import { C } from '../../lib/theme'
+import { C, GLASS, INSET } from '../../lib/theme'
+import { ScoreRing } from '../charts/MiniCharts'
 import { useTenant } from '../../context/TenantContext'
 
 const PLAIN_TITLES = {
@@ -13,7 +14,7 @@ const STATUS_LABELS = { good: 'Good', warn: 'Needs attention', bad: 'Action need
 
 function Section({ title, subtitle, children, accent }) {
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', background: C.card }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', ...GLASS }}>
       <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: accent ? `${accent}08` : 'transparent' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title}</div>
         {subtitle && <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{subtitle}</div>}
@@ -26,10 +27,10 @@ function Section({ title, subtitle, children, accent }) {
 }
 
 function HealthCard({ check, onAsk }) {
-  const color = check.status === 'good' ? C.frank : check.status === 'warn' ? C.warn : C.danger
+  const color = check.status === 'good' ? C.frank : check.status === 'warn' ? C.warn : C.watch
   const bm = check.benchmark || null
   return (
-    <div style={{ border: `1px solid ${color}25`, borderTop: `3px solid ${color}`, borderRadius: 8, padding: '18px 20px', background: '#0a1828' }}>
+    <div style={{ border: `1px solid ${color}25`, borderTop: `3px solid ${color}`, borderRadius: 8, padding: '18px 20px', background: INSET }}>
 
       {/* Card title + score */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
@@ -54,19 +55,19 @@ function HealthCard({ check, onAsk }) {
       </div>
 
       {/* What this means */}
-      <div style={{ marginBottom: 12, padding: '10px 14px', background: C.card, borderRadius: 6, border: `1px solid ${C.border}` }}>
+      <div style={{ marginBottom: 12, padding: '10px 14px', ...GLASS, borderRadius: 6, border: `1px solid ${C.border}` }}>
         <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 }}>What This Means</div>
         <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6 }}>{check.message}</div>
       </div>
 
       {/* Benchmark comparison */}
       {bm && (
-        <div style={{ marginBottom: 12, padding: '10px 14px', background: C.card, borderRadius: 6, border: `1px solid ${C.border}` }}>
+        <div style={{ marginBottom: 12, padding: '10px 14px', ...GLASS, borderRadius: 6, border: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 10, color: C.dim, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>How You Compare to the Target</div>
           <div style={{ display: 'flex', gap: 0 }}>
             <div style={{ flex: 1, paddingRight: 12, borderRight: `1px solid ${C.border}`, marginRight: 12 }}>
               <div style={{ fontSize: 10, color: C.dim, marginBottom: 3 }}>Your rate</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: bm.warn ? C.danger : C.frank, fontFamily: 'var(--mono)' }}>{bm.actual}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: bm.warn ? C.watch : C.frank, fontFamily: 'var(--mono)' }}>{bm.actual}</div>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 10, color: C.dim, marginBottom: 3 }}>Target</div>
@@ -95,7 +96,7 @@ export function Health({ onAsk }) {
   const { data } = useTenant()
   const { HEALTH_CHECKS } = data
   const overallScore = Math.round(HEALTH_CHECKS.reduce((a, h) => a + h.score, 0) / HEALTH_CHECKS.length)
-  const scoreColor   = overallScore > 75 ? C.frank : overallScore > 50 ? C.warn : C.danger
+  const scoreColor   = overallScore > 75 ? C.frank : overallScore > 50 ? C.warn : C.watch
 
   const issues = HEALTH_CHECKS.filter(h => h.status !== 'good').length
   const highPriority = HEALTH_CHECKS.filter(h => h.priority === 'HIGH')
@@ -104,20 +105,19 @@ export function Health({ onAsk }) {
     <div className="fade-up" style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
 
       {/* ── Page Header ──────────────────────────────────────── */}
-      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, background: C.card }}>
+      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, ...GLASS }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 4 }}>Business Health Check</div>
         <div style={{ fontSize: 13, color: C.sub }}>How is your business doing — and what do you need to do about it? Six key areas, in plain English.</div>
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: '#0a1828' }}>
+      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, background: INSET }}>
 
         {/* ── Section 1: Overall Score ──────────────────────── */}
         <Section title="Your Overall Health Score" subtitle="A score out of 100 across 6 key areas of your business">
           <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
             {/* Big score */}
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
-              <div style={{ fontSize: 80, fontWeight: 800, color: scoreColor, fontFamily: 'var(--mono)', lineHeight: 1 }}>{overallScore}</div>
-              <div style={{ fontSize: 14, color: C.dim, marginTop: 4 }}>out of 100</div>
+              <ScoreRing score={overallScore} size={150} />
             </div>
 
             <div style={{ flex: 1 }}>
@@ -134,7 +134,7 @@ export function Health({ onAsk }) {
                 {[
                   { label: 'Areas doing well',   count: HEALTH_CHECKS.filter(h => h.status === 'good').length, color: C.frank },
                   { label: 'Need attention',      count: HEALTH_CHECKS.filter(h => h.status === 'warn').length, color: C.warn },
-                  { label: 'Act now',             count: HEALTH_CHECKS.filter(h => h.status === 'bad').length,  color: C.danger },
+                  { label: 'Act now',             count: HEALTH_CHECKS.filter(h => h.status === 'bad').length,  color: C.watch },
                 ].map(row => (
                   <div key={row.label} style={{ padding: '10px 14px', background: `${row.color}10`, borderRadius: 6, border: `1px solid ${row.color}25`, textAlign: 'center' }}>
                     <div style={{ fontSize: 28, fontWeight: 800, color: row.color, fontFamily: 'var(--mono)' }}>{row.count}</div>
@@ -151,7 +151,7 @@ export function Health({ onAsk }) {
           <Section title="High Priority — Act This Month" subtitle="These three areas have the biggest impact on your business right now">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {highPriority.map(check => {
-                const color = check.status === 'good' ? C.frank : check.status === 'warn' ? C.warn : C.danger
+                const color = check.status === 'good' ? C.frank : check.status === 'warn' ? C.warn : C.watch
                 return (
                   <div key={check.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -171,7 +171,7 @@ export function Health({ onAsk }) {
         )}
 
         {/* ── Section 3: All Health Cards ───────────────────── */}
-        <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', background: C.card }}>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', ...GLASS }}>
           <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Detailed Health Breakdown</div>
             <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>Each of the 6 areas explained — what it means and what to do</div>
