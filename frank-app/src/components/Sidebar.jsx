@@ -1,7 +1,7 @@
 import { Lock, LayoutDashboard, TrendingUp, FileBarChart, Scale, HeartPulse, Upload, FileText, Users, CreditCard, ArrowLeftRight, Plug, MessageCircle } from 'lucide-react'
 import { C, FONT_SUB } from '../lib/theme'
 import { useTenant } from '../context/TenantContext'
-import { allows } from '../lib/plans'
+import { allows, PLANS } from '../lib/plans'
 import { startUpgrade } from '../lib/upgrade'
 
 const NAV_ITEMS = [
@@ -18,6 +18,12 @@ const NAV_ITEMS = [
   { id: 'connect',    label: 'Connections',     Icon: Plug },
   { id: 'chat',       label: 'Ask Zeeder',      Icon: MessageCircle },
 ]
+
+// "Pro Plan · R 1 999/mo", or "Pro Plan · Complimentary" for a pack we give away (no charge).
+function planLine({ plan, amount_cents }) {
+  const name = PLANS[String(plan).toLowerCase()]?.name ?? plan
+  return amount_cents > 0 ? `${name} Plan · R ${(amount_cents / 100).toLocaleString('en-ZA')}/mo` : `${name} Plan · Complimentary`
+}
 
 export function Sidebar({ view, onNav, onAsk }) {
   const { tenant, data, bankData, currentUser, logout, deleteAccount, canDeleteAccount, subscription, cancelSubscription, plan } = useTenant()
@@ -92,7 +98,7 @@ export function Sidebar({ view, onNav, onAsk }) {
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={{ fontSize: 12, color: C.dim, letterSpacing: 1, textTransform: 'uppercase' }}>
-              {subscription ? `${subscription.plan} Plan · R ${(subscription.amount_cents / 100).toLocaleString('en-ZA')}/mo` : tenant?.demo ? 'Demo workspace' : `Trial — ${currentUser?.trialDaysLeft ?? 0} days left`}
+              {subscription ? planLine(subscription) : tenant?.demo ? 'Demo workspace' : `Trial — ${currentUser?.trialDaysLeft ?? 0} days left`}
             </div>
           </div>
           {subscription ? (
