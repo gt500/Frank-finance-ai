@@ -68,6 +68,7 @@ beforeAll(async () => {
   `)
   await db.exec(sql('20261115a_invoicing_ledger.sql'))
   await db.exec(sql('20261115b_mailbox_vault.sql'))
+  await db.exec(sql('20261115c_manual_journal_and_statements.sql'))
 }, 60000)
 
 describe('issuing an invoice', () => {
@@ -288,5 +289,82 @@ describe('mailbox password and account deletion', () => {
       expect((await db.query(`select count(*)::int as n from ${t} where tenant_id = 't-purge'`)).rows[0].n).toBe(0)
       expect((await db.query(`select count(*)::int as n from ${t} where tenant_id = 't-keep'`)).rows[0].n).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('manual transactions', () => {
+  const post = (uid, memo, lines, date = '2026-07-05') =>
+    asUser(uid, 'select post_manual_journal($1, $2, $3::jsonb) as id', [date, memo, JSON.stringify(lines)]).then((r) => r.rows[0].id)
+  const rent = [{ account: '6200', debit: 200000, credit: 0 }, { account: '2210', debit: 30000, credit: 0 }, { account: '1000', debit: 0, credit: 230000 }]
+
+  test('a balanced expense is posted as a manual entry for the caller', async () => {
+    const uid = await tenant('t-man')
+    const id = await post(uid, 'July rent', rent)
+    const e = (await db.query('select tenant_id, source_type, memo from journal_entries where id = $1', [id])).rows[0]
+    expect(e).toEqual({ tenant_id: 't-man', source_type: 'manual', memo: 'July rent' })
+    expect(await balanceOf('t-man', '1000')).toBe(-230000)
+    expect(await balanceOf('t-man', '6200')).toBe(200000)
+  })
+
+  test('an unbalanced manual entry is rejected', async () => {
+    const uid = await tenant('t-man-bad')
+    await expect(post(uid, 'oops', [{ account: '6200', debit: 100, credit: 0 }, { account: '1000', debit: 0, credit: 99 }])).rejects.toThrow(/not balanced/)
+    expect((await db.query(`select count(*)::int as n from journal_entries where tenant_id = 't-man-bad'`)).rows[0].n).toBe(0)
+  })
+
+  test('refuses Debtors, bad dates, blank text, too few lines and negative amounts', async () => {
+    const uid = await tenant('t-man-rules')
+    await expect(post(uid, 'x', [{ account: '1100', debit: 100, credit: 0 }, { account: '4000', debit: 0, credit: 100 }])).rejects.toThrow(/Debtors/)
+    await expect(post(uid, 'x', rent, '1999-01-01')).rejects.toThrow(/date/)
+    await expect(post(uid, 'x', rent, '2099-01-01')).rejects.toThrow(/date/)
+    await expect(post(uid, '   ', rent)).rejects.toThrow(/description/)
+    await expect(post(uid, 'x', [{ account: '6200', debit: 100, credit: 0 }])).rejects.toThrow(/between 2 and 20/)
+    await expect(post(uid, 'x', [{ account: '6200', debit: -5, credit: 0 }, { account: '1000', debit: 0, credit: -5 }])).rejects.toThrow(/negative/)
+    await expect(post(uid, 'x', [{ account: '9999', debit: 100, credit: 0 }, { account: '1000', debit: 0, credit: 100 }])).rejects.toThrow()
+  })
+
+  test('signed-out visitors cannot post', async () => {
+    await expect(asAnon(`select post_manual_journal('2026-07-05', 'x', '[]'::jsonb)`)).rejects.toThrow(/permission denied/)
+  })
+
+  test('reversing nets the entry to zero, once, and only for the owner', async () => {
+    const a = await tenant('t-rev-a'), b = await tenant('t-rev-b')
+    const id = await post(a, 'Wrong supplier', rent)
+    await expect(asUser(b, 'select reverse_journal_entry($1)', [id])).rejects.toThrow(/not found/)
+    await asUser(a, 'select reverse_journal_entry($1)', [id])
+    for (const acct of ['1000', '2210', '6200']) expect(await balanceOf('t-rev-a', acct)).toBe(0)
+    await expect(asUser(a, 'select reverse_journal_entry($1)', [id])).rejects.toThrow(/already been reversed/)
+  })
+
+  test('invoice and payment entries cannot be reversed by hand', async () => {
+    const uid = await tenant('t-rev-inv')
+    const doc = await draft(uid)
+    await issue(uid, doc)
+    const entry = (await db.query(`select id from journal_entries where tenant_id = 't-rev-inv' and source_type = 'invoice'`)).rows[0].id
+    await expect(asUser(uid, 'select reverse_journal_entry($1)', [entry])).rejects.toThrow(/recorded by hand/)
+  })
+})
+
+describe('ledger totals for the statements', () => {
+  test('splits what came before the period from what happened in it, per account', async () => {
+    const uid = await tenant('t-totals')
+    const lines = (acct, cents, side) => [{ account: acct, debit: side === 'dr' ? cents : 0, credit: side === 'dr' ? 0 : cents }]
+    const post = (date, memo, ls) => asUser(uid, 'select post_manual_journal($1, $2, $3::jsonb)', [date, memo, JSON.stringify(ls)])
+    await post('2026-06-10', 'Opening', [...lines('1000', 1000000, 'dr'), ...lines('3000', 1000000, 'cr')])
+    await post('2026-07-02', 'Rent', [...lines('6200', 200000, 'dr'), ...lines('1000', 200000, 'cr')])
+    await post('2026-08-02', 'After the period', [...lines('6200', 5, 'dr'), ...lines('1000', 5, 'cr')])
+    const { rows } = await asUser(uid, `select account_code, opening_debit::int as od, opening_credit::int as oc, period_debit::int as pd, period_credit::int as pc
+      from ledger_totals('2026-07-01', '2026-07-31') order by 1`)
+    expect(rows).toEqual([
+      { account_code: '1000', od: 1000000, oc: 0, pd: 0, pc: 200000 },
+      { account_code: '3000', od: 0, oc: 1000000, pd: 0, pc: 0 },
+      { account_code: '6200', od: 0, oc: 0, pd: 200000, pc: 0 },
+    ])
+  })
+
+  test('only ever returns the caller’s own books', async () => {
+    const a = await tenant('t-totals-a'), b = await tenant('t-totals-b')
+    await asUser(a, `select post_manual_journal('2026-07-02', 'x', '[{"account":"6200","debit":700,"credit":0},{"account":"1000","debit":0,"credit":700}]'::jsonb)`)
+    expect((await asUser(b, `select * from ledger_totals('2026-07-01', '2026-07-31')`)).rows).toEqual([])
   })
 })

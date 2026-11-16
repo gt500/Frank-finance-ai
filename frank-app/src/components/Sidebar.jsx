@@ -1,4 +1,4 @@
-import { LayoutDashboard, TrendingUp, FileBarChart, HeartPulse, Upload, FileText, Users, CreditCard, ArrowLeftRight, Plug, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, TrendingUp, FileBarChart, Scale, HeartPulse, Upload, FileText, Users, CreditCard, ArrowLeftRight, Plug, MessageCircle } from 'lucide-react'
 import { C, FONT_SUB } from '../lib/theme'
 import { useTenant } from '../context/TenantContext'
 import { supabase } from '../lib/supabaseClient'
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: 'dashboard',  label: 'Dashboard',       Icon: LayoutDashboard },
   { id: 'cashflow',   label: 'Cash Flow',       Icon: TrendingUp, badgeKey: 'highFlags' },
   { id: 'reports',    label: 'Reports',         Icon: FileBarChart },
+  { id: 'statements', label: 'Financial Statements', Icon: Scale },
   { id: 'health',     label: 'Business Health', Icon: HeartPulse, badgeKey: 'hScore' },
   { id: 'documents',  label: 'Documents',       Icon: Upload },
   { id: 'invoices',   label: 'Invoices',        Icon: FileText },
