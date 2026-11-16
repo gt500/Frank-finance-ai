@@ -45,9 +45,9 @@ describe('landing page', () => {
       fireEvent.click(within(pack).getByRole('button', { name: new RegExp(`Start ${PLANS[id].name}`) }))
       expect(onStart).toHaveBeenLastCalledWith(id)
     }
-    expect(document.body.textContent).toMatch(/R 499/)
-    expect(document.body.textContent).toMatch(/R 999/)
-    expect(document.body.textContent).toMatch(/R 1 999/)
+    expect(document.body.textContent).toMatch(/R\u00A0499/)
+    expect(document.body.textContent).toMatch(/R\u00A0999/)
+    expect(document.body.textContent).toMatch(/R\u00A01\u00A0999/)
   })
 
   test('footer links to real privacy and terms pages and a contact address', () => {
