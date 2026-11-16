@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { simplePayApi } from '../lib/simplePayApi'
 import { buildMonthlyEntry, mergeMonthly, removeMonthly } from '../lib/monthlyHistory'
 import { createSaveQueue } from '../lib/saveQueue'
+import { LEGAL } from '../pages/legalContent'
+import { planFor } from '../lib/plans'
 
 const TenantContext = createContext(null)
 const LEGACY_KEYS = ['zeeder_accounts','zeeder_user','zeeder_custom_tenants','zeeder_imported_data','zeeder_simplepay_keys','zeeder_tenant']
@@ -214,7 +216,9 @@ export function TenantProvider({ children }) {
     // Profile + tenant are created server-side by the handle_new_user trigger.
     const { data, error } = await supabase.auth.signUp({
       email: form.email.trim().toLowerCase(), password: form.password,
-      options: { data: { name: form.name, tenant_id: `tenant-${Date.now()}`, business_name: form.businessName, sector: form.sector, location: form.location, staff: form.staff, plan: form.plan } },
+      options: { data: { name: form.name, tenant_id: `tenant-${Date.now()}`, business_name: form.businessName, sector: form.sector, location: form.location, staff: form.staff, plan: form.plan,
+        // POPIA: when and to what the person agreed.
+        consent_at: new Date().toISOString(), consent_version: LEGAL.version } },
     })
     if (error) return { ok: false, error: error.message }
     return { ok: true, needsConfirmation: !data.session }
@@ -283,10 +287,13 @@ export function TenantProvider({ children }) {
   }
 
 
+  // Which pack unlocks what: the paid subscription, otherwise the pack chosen at sign-up.
+  const plan = planFor({ tenantId: tenant?.id, subscription, chosen: tenant?.plan, trialStart: tenant?.trialStart })
+
   return (
     <TenantContext.Provider value={{
       tenant, data: mergedData, tenantError, saveError, retrySave: () => saveQueueRef.current.retry(), systemPrompt: tenant?.systemPrompt || '',
-      activeTenantId: tid, currentUser, authLoading, subscription,
+      activeTenantId: tid, currentUser, authLoading, subscription, plan,
       login, logout, registerAccount, cancelSubscription, deleteAccount,
       recovering, requestPasswordReset, updatePassword, cancelRecovery,
       canDeleteAccount: !!tenant && !TENANTS.some(t => t.id === tenant.id),

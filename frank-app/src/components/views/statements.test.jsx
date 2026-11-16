@@ -8,6 +8,8 @@ const ledger = vi.hoisted(() => ({
   postStockCount: vi.fn(), saveTaxRate: vi.fn(),
 }))
 vi.mock('../../lib/ledgerApi', () => ledger)
+let plan = 'pro'
+vi.mock('../../context/TenantContext', () => ({ useTenant: () => ({ plan }) }))
 vi.mock('../../lib/invoiceApi', async (orig) => ({ ...(await orig()), getSettings: async () => ({ business_name: 'Cape Fresh Grocery' }) }))
 
 import { FinancialStatements } from './FinancialStatements'
@@ -22,6 +24,7 @@ async function openJuly() {
 const sheet = (name) => screen.findByRole('article', { name })
 
 beforeEach(() => {
+  plan = 'pro'
   Object.values(ledger).forEach((f) => f.mockReset())
   ledger.getChartAccounts.mockResolvedValue(accounts)
   ledger.getLedgerTotals.mockImplementation(async (from, to) => totals(from, to))
@@ -30,6 +33,23 @@ beforeEach(() => {
   ledger.getTaxRate.mockResolvedValue(null)
   ledger.countPostedBankLines.mockResolvedValue(0)
   ledger.listFixedAssets.mockResolvedValue([])
+})
+
+describe('Financial statements by pack', () => {
+  test('Growth gets the income statement and recording, but not the other statements or the adjustments', async () => {
+    plan = 'growth'
+    await openJuly()
+    await sheet('Income statement')
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Income statement'])
+    expect(screen.getByRole('button', { name: 'Record a transaction' })).toBeTruthy()
+    expect(screen.queryByText('Equipment, stock and income tax')).toBeNull()
+  })
+
+  test('Pro gets all five statements', async () => {
+    await openJuly()
+    await sheet('Income statement')
+    expect(screen.getAllByRole('tab')).toHaveLength(5)
+  })
 })
 
 describe('Financial statements', () => {

@@ -9,6 +9,10 @@ import { Login } from './pages/Login'
 import { Onboarding } from './pages/Onboarding'
 import { ResetPassword } from './pages/ResetPassword'
 import { BillingReturn } from './pages/BillingReturn'
+import { Landing } from './pages/Landing'
+import { Legal } from './pages/Legal'
+import { LockedFeature } from './components/PlanGate'
+import { allows } from './lib/plans'
 
 const Dashboard      = lazy(() => import('./components/views/Dashboard').then(m => ({ default: m.Dashboard })))
 const CashFlow       = lazy(() => import('./components/views/CashFlow').then(m => ({ default: m.CashFlow })))
@@ -23,6 +27,9 @@ const Connections    = lazy(() => import('./components/views/Connections').then(
 const Reconciliation = lazy(() => import('./components/views/Reconciliation').then(m => ({ default: m.Reconciliation })))
 const Chat           = lazy(() => import('./components/views/Chat').then(m => ({ default: m.Chat })))
 
+// Screens that need a pack feature. Anything not listed is in every pack.
+const VIEW_FEATURE = { invoices: 'invoicing', statements: 'incomeStatement' }
+
 const VIEW_LABELS = {
   dashboard: 'Dashboard', cashflow: 'Cash Flow', reports: 'Reports', statements: 'Financial Statements', health: 'Business Health',
   documents: 'Upload Documents', invoices: 'Invoices & Quotes', ar: 'Debtors', ap: 'Creditors', reconcile: 'Reconciliation',
@@ -30,7 +37,9 @@ const VIEW_LABELS = {
 }
 
 export default function App() {
-  if (window.location.pathname.startsWith('/billing/return')) return <BillingReturn />
+  const path = window.location.pathname.replace(/\/+$/, '')
+  if (path.startsWith('/billing/return')) return <BillingReturn />
+  if (path === '/privacy' || path === '/terms') return <Legal page={path.slice(1)} onHome={() => window.location.assign('/')} />
   return (
     <TenantProvider>
       <AppContent />
@@ -54,10 +63,11 @@ function AppShell() {
   const {
     tenant, data, tenantError, saveError, retrySave, systemPrompt, currentUser, authLoading,
     login, logout, registerAccount, bankData,
-    recovering, requestPasswordReset, updatePassword, cancelRecovery,
+    recovering, requestPasswordReset, updatePassword, cancelRecovery, plan,
     simplePayConnected, connectSimplePay, disconnectSimplePay,
   } = useTenant()
-  const [authMode, setAuthMode] = useState('login')
+  const [authMode, setAuthMode] = useState('landing')
+  const [startPlan, setStartPlan] = useState(null)
   const [view, setView] = useState(() => readLastView(currentUser))
   useEffect(() => {
     if (!currentUser) return
@@ -121,8 +131,9 @@ Be concise. Numbers first. One specific next action per answer.`
     )
   }
   if (!currentUser) {
-    if (authMode === 'onboarding') return <Onboarding onComplete={(form) => registerAccount(form)} onBack={() => setAuthMode('login')} />
-    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} onResetRequest={requestPasswordReset} />
+    if (authMode === 'onboarding') return <Onboarding initialPlan={startPlan} onComplete={(form) => registerAccount(form)} onBack={() => setAuthMode('login')} />
+    if (authMode === 'login') return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} onResetRequest={requestPasswordReset} onHome={() => setAuthMode('landing')} />
+    return <Landing onSignIn={() => setAuthMode('login')} onStart={(id) => { setStartPlan(id ?? null); setAuthMode('onboarding') }} />
   }
   if (!tenant || !data) return spinner
 
@@ -149,6 +160,7 @@ Be concise. Numbers first. One specific next action per answer.`
         )}
         <div style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
           <Suspense fallback={spinner}>
+            {VIEW_FEATURE[view] && !allows(plan, VIEW_FEATURE[view]) ? <LockedFeature feature={VIEW_FEATURE[view]} label={VIEW_LABELS[view]} /> : <>
             {view === 'dashboard'  && <Dashboard      {...viewProps} />}
             {view === 'cashflow'   && <CashFlow       {...viewProps} />}
             {view === 'reports'    && <Reports        {...viewProps} />}
@@ -161,6 +173,7 @@ Be concise. Numbers first. One specific next action per answer.`
             {view === 'reconcile'  && <Reconciliation {...viewProps} onNav={setView} />}
             {view === 'connect'    && <Connections    {...viewProps} onNav={setView} />}
             {view === 'chat'       && <Chat frank={frank} systemPrompt={aiContext} />}
+            </>}
           </Suspense>
         </div>
       </div>

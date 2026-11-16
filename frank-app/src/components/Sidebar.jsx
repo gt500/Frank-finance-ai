@@ -1,16 +1,17 @@
-import { LayoutDashboard, TrendingUp, FileBarChart, Scale, HeartPulse, Upload, FileText, Users, CreditCard, ArrowLeftRight, Plug, MessageCircle } from 'lucide-react'
+import { Lock, LayoutDashboard, TrendingUp, FileBarChart, Scale, HeartPulse, Upload, FileText, Users, CreditCard, ArrowLeftRight, Plug, MessageCircle } from 'lucide-react'
 import { C, FONT_SUB } from '../lib/theme'
 import { useTenant } from '../context/TenantContext'
-import { supabase } from '../lib/supabaseClient'
+import { allows } from '../lib/plans'
+import { startUpgrade } from '../lib/upgrade'
 
 const NAV_ITEMS = [
   { id: 'dashboard',  label: 'Dashboard',       Icon: LayoutDashboard },
   { id: 'cashflow',   label: 'Cash Flow',       Icon: TrendingUp, badgeKey: 'highFlags' },
   { id: 'reports',    label: 'Reports',         Icon: FileBarChart },
-  { id: 'statements', label: 'Financial Statements', Icon: Scale },
+  { id: 'statements', label: 'Financial Statements', Icon: Scale, feature: 'incomeStatement' },
   { id: 'health',     label: 'Business Health', Icon: HeartPulse, badgeKey: 'hScore' },
   { id: 'documents',  label: 'Documents',       Icon: Upload },
-  { id: 'invoices',   label: 'Invoices',        Icon: FileText },
+  { id: 'invoices',   label: 'Invoices',        Icon: FileText, feature: 'invoicing' },
   { id: 'ar',         label: 'Debtors',         Icon: Users },
   { id: 'ap',         label: 'Creditors',       Icon: CreditCard },
   { id: 'reconcile',  label: 'Reconciliation',  Icon: ArrowLeftRight, badgeKey: 'unmatched' },
@@ -19,7 +20,7 @@ const NAV_ITEMS = [
 ]
 
 export function Sidebar({ view, onNav, onAsk }) {
-  const { tenant, data, bankData, currentUser, logout, deleteAccount, canDeleteAccount, subscription, cancelSubscription } = useTenant()
+  const { tenant, data, bankData, currentUser, logout, deleteAccount, canDeleteAccount, subscription, cancelSubscription, plan } = useTenant()
   const hScore    = Math.round(data.HEALTH_CHECKS.reduce((a, h) => a + h.score, 0) / data.HEALTH_CHECKS.length)
   const highFlags = data.CASHFLOW_FLAGS.filter(f => f.severity === 'HIGH').length
   const unmatched = bankData && !bankData.isConfirmed
@@ -50,7 +51,8 @@ export function Sidebar({ view, onNav, onAsk }) {
         </div>
 
         <nav aria-label="Main" style={{ flex: '1 0 auto', padding: '4px 10px' }}>
-          {NAV_ITEMS.map(({ id, label, Icon, badgeKey }) => {
+          {NAV_ITEMS.map(({ id, label, Icon, badgeKey, feature }) => {
+            const locked = !!feature && !!plan && !allows(plan, feature)
             const active = view === id
             const badgeVal = badgeKey ? badges[badgeKey] : null
             const badgeCol = badgeKey ? badgeColors[badgeKey] : null
@@ -61,7 +63,8 @@ export function Sidebar({ view, onNav, onAsk }) {
                   background: active ? 'linear-gradient(90deg, rgba(32,229,246,0.16), rgba(32,229,246,0.03))' : 'transparent',
                   color: active ? C.frank : C.soft }}>
                 <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
-                <span style={{ flex: 1 }}>{label}</span>
+                <span style={{ flex: 1 }}>{label}{locked && <span className="sr-only"> (not in your pack)</span>}</span>
+                {locked && <Lock size={14} strokeWidth={1.7} aria-hidden="true" style={{ opacity: 0.6 }} />}
                 {badgeVal != null && (
                   <span className="num" style={{ fontSize: 11, color: badgeCol, background: `${badgeCol}1f`, border: `1px solid ${badgeCol}40`, borderRadius: 999, padding: '1px 7px' }}>{badgeVal}</span>
                 )}
@@ -97,17 +100,8 @@ export function Sidebar({ view, onNav, onAsk }) {
               className="btn-ghost" style={{ width: '100%', fontSize: 12, color: C.soft }}>Cancel subscription</button>
           ) : tenant?.demo ? null : (
             <button onClick={async () => {
-                try {
-                  const { data: { session } } = await supabase.auth.getSession()
-                  if (!session) throw new Error('Not signed in — please log in again.')
-                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paygate-initiate`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ plan: tenant.plan === 'Starter' ? 'starter' : 'growth', first_name: currentUser?.name?.split(' ')[0], last_name: currentUser?.name?.split(' ').slice(1).join(' ') }),
-                  })
-                  const data = await res.json()
-                  if (data.redirect_url) window.location.href = data.redirect_url
-                  else onAsk(`Upgrade failed: ${data.error ?? 'unknown error'}. What should I check?`)
-                } catch (e) { onAsk(`Upgrade failed to start: ${e.message}. What should I check?`) }
+                const r = await startUpgrade({ planId: plan ?? 'growth', user: currentUser })
+                if (!r.ok) onAsk(`Upgrade failed: ${r.error}. What should I check?`)
               }}
               className="btn-gold" style={{ width: '100%' }}>Upgrade →</button>
           )}

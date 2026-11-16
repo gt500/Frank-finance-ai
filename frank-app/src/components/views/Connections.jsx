@@ -118,7 +118,7 @@ function SimplePayCard({ payrollData, payrollLoading, payrollError, simplePayCon
   )
 }
 
-// The five major SA banks. Statement upload is real today; a live feed is not built (needs an open-banking provider).
+// The five major SA banks. Zeeder works from uploaded statements (CSV, Excel or PDF); there are no live bank feeds.
 const BANKS = [
   { name: 'FNB', mono: 'FNB' },
   { name: 'Standard Bank', mono: 'SB' },
@@ -132,7 +132,7 @@ function BanksPanel({ onUpload }) {
     <div className="glass" style={{ padding: 20, marginBottom: 14 }}>
       <h2 className="ttl">Your bank</h2>
       <div style={{ fontSize: 13, color: C.soft, marginTop: 4, lineHeight: 1.5 }}>
-        Zeeder reads statements from all five major South African banks today. Live bank feeds are on the roadmap — until then, upload a statement and everything updates.
+        Zeeder reads statements from all five major South African banks. Upload a statement as a CSV, Excel or PDF file and everything updates.
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginTop: 14 }}>
         {BANKS.map((b) => (
@@ -142,7 +142,6 @@ function BanksPanel({ onUpload }) {
               <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{b.name}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.soft }}><span>Statement upload</span><span style={{ color: C.frank }}>Supported</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.soft }}><span>Live bank feed</span><span style={{ color: C.gold }}>Coming soon</span></div>
           </div>
         ))}
       </div>

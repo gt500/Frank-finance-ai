@@ -3,6 +3,7 @@ import { C, fmt, GLASS, INSET } from '../../lib/theme'
 import { useTenant } from '../../context/TenantContext'
 import { PaymentMatches } from './PaymentMatches'
 import { BankPosting } from '../bank/BankPosting'
+import { usePlanAccess } from '../PlanGate'
 
 function Section({ title, subtitle, children, accent }) {
   return (
@@ -84,6 +85,7 @@ function TxRow({ tx, type, onRename, onAsk }) {
 
 export function Reconciliation({ onAsk, onNav }) {
   const { bankData, loadBankStatement, updateEntityName, confirmBankReconciliation, clearBankData } = useTenant()
+  const { can } = usePlanAccess()
   const [tab, setTab] = useState('all')
 
   if (!bankData) {
@@ -171,9 +173,9 @@ export function Reconciliation({ onAsk, onNav }) {
           </div>
         )}
 
-        <PaymentMatches credits={credits} />
+        {can('reconciliation') && <PaymentMatches credits={credits} />}
 
-        <BankPosting bankData={bankData} />
+        {can('bankPosting') && <BankPosting bankData={bankData} />}
 
         {/* ── Tabs ───────────────────────────────────── */}
         <Section title="Transaction Review" subtitle={`${unmatchedCount > 0 ? `${unmatchedCount} transactions need a name — click to rename` : 'All transactions matched'} · Click any name to edit it`}>
