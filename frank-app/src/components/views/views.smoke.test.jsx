@@ -5,6 +5,8 @@ import { TENANTS } from '../../data/tenants'
 // Render every redesigned screen with the real demo data, and with an empty brand-new workspace.
 let current
 vi.mock('../../context/TenantContext', () => ({ useTenant: () => current }))
+// Connections now shows the mailbox settings; keep this test off the network.
+vi.mock('../../lib/invoiceApi', async (orig) => ({ ...(await orig()), getSettings: async () => null, getMailbox: async () => null }))
 
 import { Dashboard } from './Dashboard'
 import { CashFlow } from './CashFlow'

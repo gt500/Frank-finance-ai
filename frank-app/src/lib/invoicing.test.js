@@ -2,7 +2,7 @@ import { describe, test, expect } from 'vitest'
 import {
   toCents, formatRand, lineTotalCents, documentTotals, formatDocumentNumber,
   validateDocument, buildInvoiceJournal, buildPaymentJournal, buildReversal, isBalanced,
-  proposePaymentMatches, ACCOUNTS,
+  proposePaymentMatches, agingBucket, buildStatement, ACCOUNTS,
 } from './invoicing.js'
 
 const plain = (s) => s.normalize('NFKC')   // the locale uses non-breaking spaces; NFKC turns them into plain spaces
@@ -182,5 +182,59 @@ describe('proposePaymentMatches — proposes, never decides', () => {
 
   test('lines that match nothing are left out', () => {
     expect(proposePaymentMatches([line('t8', 'WOOLWORTHS PURCHASE', 123.45)], invoices)).toEqual([])
+  })
+})
+
+describe('ageing — how late is an unpaid invoice', () => {
+  test('not yet due, or due today, is current', () => {
+    expect(agingBucket('2026-08-10', '2026-08-01')).toBe('current')
+    expect(agingBucket('2026-08-10', '2026-08-10')).toBe('current')
+  })
+  test('buckets by whole days past the due date', () => {
+    expect(agingBucket('2026-08-10', '2026-08-11')).toBe('d1_30')
+    expect(agingBucket('2026-08-10', '2026-09-09')).toBe('d1_30')   // 30 days
+    expect(agingBucket('2026-08-10', '2026-09-10')).toBe('d31_60')  // 31 days
+    expect(agingBucket('2026-08-10', '2026-10-09')).toBe('d31_60')  // 60 days
+    expect(agingBucket('2026-08-10', '2026-10-10')).toBe('d61_90')  // 61 days
+    expect(agingBucket('2026-08-10', '2026-11-08')).toBe('d61_90')  // 90 days
+    expect(agingBucket('2026-08-10', '2026-11-09')).toBe('d90plus') // 91 days
+  })
+})
+
+describe('buildStatement — what one customer owes, line by line', () => {
+  const invoices = [
+    { number: 'INV-0001', date: '2026-06-01', dueDate: '2026-06-15', totalCents: 100000, status: 'issued' },
+    { number: 'INV-0002', date: '2026-07-01', dueDate: '2026-07-15', totalCents: 250000, status: 'issued' },
+    { number: 'INV-0003', date: '2026-07-20', dueDate: '2026-08-03', totalCents: 90000, status: 'void' },
+    { number: 'INV-0004', date: '2026-07-25', dueDate: '2026-08-08', totalCents: 70000, status: 'draft' },
+  ]
+  const payments = [{ invoiceNumber: 'INV-0001', date: '2026-06-20', amountCents: 40000 }]
+  const s = buildStatement({ customerName: 'Durbanville Catering Co.', invoices, payments, asOf: '2026-08-01' })
+
+  test('lists invoices and payments in date order with a running balance', () => {
+    expect(s.lines.map((l) => [l.ref, l.debitCents, l.creditCents, l.balanceCents])).toEqual([
+      ['INV-0001', 100000, 0, 100000],
+      ['INV-0001', 0, 40000, 60000],
+      ['INV-0002', 250000, 0, 310000],
+    ])
+  })
+  test('leaves out void and draft invoices', () => {
+    expect(s.lines.some((l) => l.ref === 'INV-0003' || l.ref === 'INV-0004')).toBe(false)
+  })
+  test('closing balance is what is still owed', () => {
+    expect(s.closingCents).toBe(310000)
+  })
+  test('ageing splits the outstanding amount by how late each invoice is', () => {
+    expect(s.aging).toEqual({ current: 0, d1_30: 250000, d31_60: 60000, d61_90: 0, d90plus: 0 })
+    expect(Object.values(s.aging).reduce((a, b) => a + b, 0)).toBe(s.closingCents)
+  })
+  test('ignores anything dated after the statement date', () => {
+    const early = buildStatement({ customerName: 'X', invoices, payments, asOf: '2026-06-10' })
+    expect(early.closingCents).toBe(100000)
+  })
+  test('a customer who owes nothing has a zero statement', () => {
+    const paid = buildStatement({ customerName: 'X', invoices: [invoices[0]], payments: [{ invoiceNumber: 'INV-0001', date: '2026-06-20', amountCents: 100000 }], asOf: '2026-08-01' })
+    expect(paid.closingCents).toBe(0)
+    expect(paid.aging).toEqual({ current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 })
   })
 })

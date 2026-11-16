@@ -30,6 +30,7 @@ Deno.serve(withCors(async (req) => {
     const tid = profile.tenant_id
     const steps: [string, PromiseLike<{ error: unknown }>][] = [
       ["stop billing", admin.from("subscriptions").update({ status: "cancelled", next_charge_at: null }).eq("tenant_id", tid).in("status", ["active", "pending", "superseded"])],
+      ["delete invoices, ledger and mailbox", admin.rpc("purge_tenant_ledger", { p_tenant: tid })],
       ["delete tenant_data", admin.from("tenant_data").delete().eq("tenant_id", tid)],
       ["delete tenant_secrets", admin.from("tenant_secrets").delete().eq("tenant_id", tid)],
       ["delete tenants", admin.from("tenants").delete().eq("id", tid)],
