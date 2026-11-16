@@ -4,6 +4,8 @@ import { accounts, totals } from '../../lib/statementsFixture'
 
 const ledger = vi.hoisted(() => ({
   getChartAccounts: vi.fn(), getLedgerTotals: vi.fn(), postEntry: vi.fn(), reverseEntry: vi.fn(), listRecordedEntries: vi.fn(),
+  postDepreciation: vi.fn(), getTaxRate: vi.fn(), countPostedBankLines: vi.fn(), listFixedAssets: vi.fn(), addFixedAsset: vi.fn(), voidFixedAsset: vi.fn(),
+  postStockCount: vi.fn(), saveTaxRate: vi.fn(),
 }))
 vi.mock('../../lib/ledgerApi', () => ledger)
 vi.mock('../../lib/invoiceApi', async (orig) => ({ ...(await orig()), getSettings: async () => ({ business_name: 'Cape Fresh Grocery' }) }))
@@ -24,6 +26,10 @@ beforeEach(() => {
   ledger.getChartAccounts.mockResolvedValue(accounts)
   ledger.getLedgerTotals.mockImplementation(async (from, to) => totals(from, to))
   ledger.listRecordedEntries.mockResolvedValue([])
+  ledger.postDepreciation.mockResolvedValue(0)
+  ledger.getTaxRate.mockResolvedValue(null)
+  ledger.countPostedBankLines.mockResolvedValue(0)
+  ledger.listFixedAssets.mockResolvedValue([])
 })
 
 describe('Financial statements', () => {
@@ -61,6 +67,34 @@ describe('Financial statements', () => {
     expect(await sheet('Statement of changes in equity')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Trial balance' }))
     expect(within(await sheet('Trial balance')).getByText('Totals')).toBeTruthy()
+  })
+
+  test('depreciation is posted before the numbers are read, and the income tax estimate and accountant note appear on the sheet', async () => {
+    ledger.getTaxRate.mockResolvedValue(27)
+    ledger.countPostedBankLines.mockResolvedValue(4)
+    await openJuly()
+    const s = await sheet('Income statement')
+    expect(ledger.postDepreciation).toHaveBeenCalled()
+    expect(ledger.postDepreciation.mock.invocationCallOrder[0]).toBeLessThan(ledger.getLedgerTotals.mock.invocationCallOrder[0])
+    expect(within(s).getByText('Estimated profit after income tax')).toBeTruthy()
+    expect(within(s).getByText(/Estimated income tax at 27%/)).toBeTruthy()
+    const note = within(s).getByLabelText('Note for your accountant')
+    expect(note.textContent).toMatch(/4 bank statement lines were categorised/)
+    expect(note.textContent).toMatch(/not audited or reviewed/)
+  })
+
+  test('without a tax rate the sheet shows profit before tax only', async () => {
+    await openJuly()
+    const s = await sheet('Income statement')
+    expect(within(s).queryByText('Estimated profit after income tax')).toBeNull()
+    expect(within(s).getByLabelText('Note for your accountant').textContent).toMatch(/no rate has been set/)
+  })
+
+  test('a failure to post depreciation is shown instead of numbers that leave it out', async () => {
+    ledger.postDepreciation.mockRejectedValue(new Error('Not signed in'))
+    render(<FinancialStatements />)
+    expect(await screen.findByText(/Couldn't load your statements: Not signed in/)).toBeTruthy()
+    expect(screen.queryByRole('article')).toBeNull()
   })
 
   test('statements that do not balance are called out loudly', async () => {

@@ -6,7 +6,7 @@
 // Input rows are ledger_totals(from, to): per account, everything before `from` (opening_*) and everything
 // from `from` to `to` (period_*). `prior` is the same call for the comparison period.
 
-const BANK = '1000', DEBTORS = '1100', STOCK = '1200', EQUIPMENT = '1500', CREDITORS = '2000', VAT_OUTPUT = '2200',
+const BANK = '1000', DEBTORS = '1100', STOCK = '1200', EQUIPMENT = '1500', ACC_DEPRECIATION = '1510', CREDITORS = '2000', VAT_OUTPUT = '2200',
   VAT_INPUT = '2210', LOANS = '2300', OWNER = '3000', RETAINED = '3100', COST_OF_SALES = '5000'
 
 const ZERO = { od: 0, oc: 0, pd: 0, pc: 0 }
@@ -23,13 +23,32 @@ const sum = (list, key) => list.reduce((s, l) => s + (l[key] ?? 0), 0)
 const FLAG_MIN_CENTS = 100000      // R1 000
 const FLAG_MIN_PCT = 10
 
-export const STATEMENT_NOTES = [
+const BASIS_NOTES = [
   'Prepared on the accrual basis from the invoices, payments and transactions recorded in Zeeder, in South African rand.',
-  'No depreciation, stock-count adjustments or income tax have been recorded, so profit is before income tax.',
-  'Presented in the format of IFRS for SMEs. These statements are management information: they are not audited or reviewed. Have a qualified accountant review them before using them for tax, funding or statutory purposes.',
+  'Presented in the format of IFRS for SMEs. These statements are management information: they are not audited or reviewed.',
 ]
 
-export function buildStatements({ accounts, current, prior = null, from, to, priorFrom = null, priorTo = null }) {
+/**
+ * What a qualified accountant should look at before these are relied on. Each item is about a judgement or an
+ * estimate Zeeder cannot make for the client, so the wording depends on what has actually been recorded.
+ */
+export function accountantNotes({ hasEquipment, hasStock, taxRatePercent, bankLinesPosted = 0 }) {
+  return [
+    hasEquipment
+      ? 'Depreciation is straight-line over the useful life and value left at the end entered for each item. These are estimates. SARS wear-and-tear allowances follow different rules, so taxable income will differ.'
+      : 'No equipment has been recorded, so no depreciation is charged. If the business owns equipment or vehicles, add them so depreciation is charged.',
+    hasStock
+      ? 'Stock is carried at the value entered at the last count. Zeeder does not check the count or the valuation, which should be the lower of cost and net realisable value.'
+      : 'No stock count has been recorded. If the business holds stock, enter a count so cost of sales and stock are right.',
+    taxRatePercent == null
+      ? 'No income tax estimate is shown because no rate has been set, so profit is before income tax.'
+      : `Income tax is an estimate: ${String(taxRatePercent).replace('.', ',')}% of profit before tax, floored at nil. It is not recorded in the books and is not a tax calculation. Taxable income differs from accounting profit (allowances, non-deductible items, assessed losses, provisional payments), and no deferred tax is recognised.`,
+    ...(bankLinesPosted > 0 ? [`${bankLinesPosted} bank statement line${bankLinesPosted === 1 ? ' was' : 's were'} categorised by Zeeder's rules and the client's own corrections. A sample should be checked against the bank statements.`] : []),
+    'These statements are not audited or reviewed. Have a qualified accountant review them before using them for tax, funding or statutory purposes.',
+  ]
+}
+
+export function buildStatements({ accounts, current, prior = null, from, to, priorFrom = null, priorTo = null, taxRatePercent = null, bankLinesPosted = 0 }) {
   const chart = [...accounts].sort((a, b) => a.code.localeCompare(b.code))
   const cur = index(current)
   const pri = prior ? index(prior) : null
@@ -67,7 +86,13 @@ export function buildStatements({ accounts, current, prior = null, from, to, pri
       }
     }
   }
-  const income = { revenue, totalRevenue, costOfSales, totalCostOfSales: totalCos, grossProfit, expenses, totalExpenses, profit,
+  // Income tax is only an estimate for the reader: it is never in the ledger, so the balance sheet is unaffected.
+  const taxOn = (cents) => Math.max(0, Math.round((cents * taxRatePercent) / 100))
+  const tax = taxRatePercent == null ? null : {
+    ratePercent: taxRatePercent, cents: taxOn(profit.cents), priorCents: pri ? taxOn(profit.priorCents) : null,
+    afterCents: profit.cents - taxOn(profit.cents), priorAfterCents: pri ? profit.priorCents - taxOn(profit.priorCents) : null,
+  }
+  const income = { revenue, totalRevenue, costOfSales, totalCostOfSales: totalCos, grossProfit, expenses, totalExpenses, profit, tax,
     margins: { gross: margin(grossProfit.cents), net: margin(profit.cents) }, flags }
 
   // ── Statement of financial position ──
@@ -85,8 +110,8 @@ export function buildStatements({ accounts, current, prior = null, from, to, pri
   }
   const equity = [...equityAccounts, ...(bsShown(retained) ? [retained] : [])]
   const t = (list) => ({ cents: sum(list, 'cents'), priorCents: sum(list, 'priorCents') })
-  const nonCurrentAssets = assets.filter((l) => l.code === EQUIPMENT)
-  const currentAssets = assets.filter((l) => l.code !== EQUIPMENT)
+  const nonCurrentAssets = assets.filter((l) => l.code === EQUIPMENT || l.code === ACC_DEPRECIATION)
+  const currentAssets = assets.filter((l) => l.code !== EQUIPMENT && l.code !== ACC_DEPRECIATION)
   const nonCurrentLiabilities = liabilities.filter((l) => l.code === LOANS)
   const currentLiabilities = liabilities.filter((l) => l.code !== LOANS)
   const totalAssets = t(assets), totalLiabilities = t(liabilities), totalEquity = t(equity)
@@ -98,9 +123,10 @@ export function buildStatements({ accounts, current, prior = null, from, to, pri
 
   // ── Statement of cash flows (indirect): profit, then what each balance-sheet account did to cash ──
   const move = (code) => nz(-periodDr(at(cur, code)))     // cash effect of the net movement on a balance-sheet account
-  const known = new Set([BANK, DEBTORS, STOCK, EQUIPMENT, CREDITORS, VAT_OUTPUT, VAT_INPUT, LOANS, OWNER, RETAINED])
+  const known = new Set([BANK, DEBTORS, STOCK, EQUIPMENT, ACC_DEPRECIATION, CREDITORS, VAT_OUTPUT, VAT_INPUT, LOANS, OWNER, RETAINED])
   const otherOperating = chart.filter((a) => (a.type === 'asset' || a.type === 'liability') && !known.has(a.code)).reduce((s, a) => s + move(a.code), 0)
   const adjustments = [
+    ['Depreciation (not a cash cost)', move(ACC_DEPRECIATION)],
     ['Decrease or (increase) in debtors', move(DEBTORS)], ['Decrease or (increase) in stock', move(STOCK)],
     ['Decrease or (increase) in VAT receivable', move(VAT_INPUT)], ['Increase or (decrease) in creditors', move(CREDITORS)],
     ['Increase or (decrease) in VAT payable', move(VAT_OUTPUT)], ['Other working capital movements', otherOperating],
@@ -142,6 +168,7 @@ export function buildStatements({ accounts, current, prior = null, from, to, pri
 
   return {
     period: { from, to }, priorPeriod: prior ? { from: priorFrom, to: priorTo } : null,
-    income, balance, cashFlow, equityMovement, trialBalance, notes: STATEMENT_NOTES,
+    income, balance, cashFlow, equityMovement, trialBalance, notes: BASIS_NOTES,
+    accountantNotes: accountantNotes({ hasEquipment: closingDr(at(cur, EQUIPMENT)) !== 0 || closingDr(at(cur, ACC_DEPRECIATION)) !== 0, hasStock: closingDr(at(cur, STOCK)) !== 0 || periodDr(at(cur, STOCK)) !== 0, taxRatePercent, bankLinesPosted }),
   }
 }

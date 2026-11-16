@@ -7,6 +7,7 @@ import { C } from './lib/theme'
 import { TenantProvider, useTenant } from './context/TenantContext'
 import { Login } from './pages/Login'
 import { Onboarding } from './pages/Onboarding'
+import { ResetPassword } from './pages/ResetPassword'
 import { BillingReturn } from './pages/BillingReturn'
 
 const Dashboard      = lazy(() => import('./components/views/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -53,6 +54,7 @@ function AppShell() {
   const {
     tenant, data, tenantError, saveError, retrySave, systemPrompt, currentUser, authLoading,
     login, logout, registerAccount, bankData,
+    recovering, requestPasswordReset, updatePassword, cancelRecovery,
     simplePayConnected, connectSimplePay, disconnectSimplePay,
   } = useTenant()
   const [authMode, setAuthMode] = useState('login')
@@ -107,6 +109,7 @@ Be concise. Numbers first. One specific next action per answer.`
   )
 
   if (authLoading) return spinner
+  if (recovering) return <ResetPassword onSubmit={updatePassword} onCancel={cancelRecovery} />
   // P0-1: never fall back into another tenant's workspace. Checked before Login so a signed-in
   // user whose profile/workspace failed to load sees why (and can sign out) instead of a Login loop.
   if (tenantError) {
@@ -119,15 +122,15 @@ Be concise. Numbers first. One specific next action per answer.`
   }
   if (!currentUser) {
     if (authMode === 'onboarding') return <Onboarding onComplete={(form) => registerAccount(form)} onBack={() => setAuthMode('login')} />
-    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} />
+    return <Login onLogin={login} onStartOnboarding={() => setAuthMode('onboarding')} onResetRequest={requestPasswordReset} />
   }
   if (!tenant || !data) return spinner
 
   return (
-    <div className="app-bg" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-bg app-shell" style={{ display: 'flex' }}>
       <Sidebar view={view} onNav={setView} onAsk={goChat} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        <header style={{ padding: '22px 26px 10px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
+      <div className="app-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <header className="app-header" style={{ padding: '22px 26px 10px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
           <div>
             <div className="tag">
               {tenant.name} · {new Date().toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}

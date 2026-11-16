@@ -9,6 +9,7 @@ import { Card, Empty } from '../shared'
 import { Field, Notice, inputStyle } from '../invoices/fields'
 import { RecordTransaction } from '../statements/RecordTransaction'
 import { StatementSheet } from '../statements/StatementSheet'
+import { Adjustments } from '../statements/Adjustments'
 
 const TABS = [['income', 'Income statement'], ['balance', 'Financial position'], ['cashFlow', 'Cash flows'], ['equity', 'Changes in equity'], ['trial', 'Trial balance']]
 
@@ -43,11 +44,15 @@ export function FinancialStatements() {
   useEffect(() => {
     if (!from) return undefined
     let live = true
-    Promise.all([ledger.getLedgerTotals(from, to), ledger.getLedgerTotals(priorFrom, priorTo), ledger.listRecordedEntries()])
-      .then(([current, prior, entries]) => { if (live) { setData({ current, prior, from, to, priorFrom, priorTo, periodLabel, priorLabel }); setRecorded(entries); setError('') } })
+    // Depreciation for the months that have ended is posted first, so the numbers below always include it.
+    ledger.postDepreciation(today)
+      .then(() => Promise.all([ledger.getLedgerTotals(from, to), ledger.getLedgerTotals(priorFrom, priorTo), ledger.listRecordedEntries(), ledger.getTaxRate(), ledger.countPostedBankLines()]))
+      .then(([current, prior, entries, taxRatePercent, bankLinesPosted]) => {
+        if (live) { setData({ current, prior, from, to, priorFrom, priorTo, periodLabel, priorLabel, taxRatePercent, bankLinesPosted }); setRecorded(entries); setError('') }
+      })
       .catch((e) => live && setError(e.message))
     return () => { live = false }
-  }, [from, to, priorFrom, priorTo, periodLabel, priorLabel, reloadKey])
+  }, [from, to, priorFrom, priorTo, periodLabel, priorLabel, reloadKey, today])
 
   const post = useCallback(async (entry) => {
     setBusy(true); setPostError(''); setNotice(null)
@@ -64,7 +69,7 @@ export function FinancialStatements() {
 
   // Only ever show numbers for the period that is selected right now (never stale ones under a new or invalid period).
   const fresh = data && range && data.from === from && data.to === to ? data : null
-  const statements = fresh && accounts.length ? buildStatements({ accounts, current: fresh.current, prior: fresh.prior, from: fresh.from, to: fresh.to, priorFrom: fresh.priorFrom, priorTo: fresh.priorTo }) : null
+  const statements = fresh && accounts.length ? buildStatements({ accounts, current: fresh.current, prior: fresh.prior, from: fresh.from, to: fresh.to, priorFrom: fresh.priorFrom, priorTo: fresh.priorTo, taxRatePercent: fresh.taxRatePercent, bankLinesPosted: fresh.bankLinesPosted }) : null
   const views = statements ? statementViews(statements, { periodLabel: fresh.periodLabel, priorLabel: fresh.priorLabel }) : null
   const empty = fresh && fresh.current.length === 0 && fresh.prior.length === 0
   const broken = statements && !(statements.balance.balanced && statements.trialBalance.balanced && statements.cashFlow.reconciles)
@@ -108,6 +113,8 @@ export function FinancialStatements() {
         {tab === 'income' && <Movements statements={statements} />}
         <Card title="Notes"><ul style={{ margin: 0, paddingLeft: 18, color: C.soft, fontSize: 13, lineHeight: 1.7 }}>{statements.notes.map((n) => <li key={n}>{n}</li>)}</ul></Card>
       </>}
+
+      <Adjustments onChanged={() => setReloadKey((k) => k + 1)} />
 
       <Recorded entries={recorded} busy={busy} onReverse={reverse} />
     </div>

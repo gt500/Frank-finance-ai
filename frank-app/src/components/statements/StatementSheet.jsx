@@ -32,6 +32,12 @@ export function StatementSheet({ business, view }) {
             </div>
           ))}
         </div>
+        {view.footnote?.length > 0 && (
+          <aside aria-label="Note for your accountant" style={{ marginTop: 22, paddingTop: 12, borderTop: `1px solid ${PAPER.rule}`, fontSize: 11, color: PAPER.muted, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 }}>Note for your accountant</div>
+            <ol style={{ margin: 0, paddingLeft: 16 }}>{view.footnote.map((n) => <li key={n}>{n}</li>)}</ol>
+          </aside>
+        )}
       </article>
     </div>
   )
