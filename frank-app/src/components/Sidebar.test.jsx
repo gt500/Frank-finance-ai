@@ -38,4 +38,11 @@ describe('plan line in the sidebar', () => {
     expect(screen.getByText(/Growth Plan · R 999\/mo/)).toBeTruthy()
     expect(screen.getByText('Cancel subscription')).toBeTruthy()
   })
+
+  test('a free pack reads as complimentary, with the pack name capitalised and no R 0', () => {
+    current = workspace({ ...TENANTS.find((t) => t.id === 'cape-fresh-grocery'), demo: false, id: 'tenant-1' }, { subscription: { plan: 'pro', amount_cents: 0 } })
+    show()
+    expect(screen.getByText('Pro Plan · Complimentary')).toBeTruthy()
+    expect(screen.queryByText(/R 0/)).toBeNull()
+  })
 })
