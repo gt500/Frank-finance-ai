@@ -83,13 +83,14 @@ describe('Brand-new empty workspace (Wonderland: all zeros, no forecast)', () =>
 describe('Connections', () => {
   beforeEach(() => { current = workspace('cape-fresh-grocery') })
 
-  test('lists all five major banks with statement upload supported and live feed coming soon', () => {
+  test('lists all five major banks with statement upload supported and makes no live-feed promise', () => {
     const onNav = vi.fn()
     render(<Connections onAsk={vi.fn()} onNav={onNav} loading={false} simplePayConnected={false} />)
     for (const bank of ['FNB', 'Standard Bank', 'Nedbank', 'Absa', 'Capitec']) expect(screen.getAllByText(bank).length).toBeGreaterThan(0)
     const panel = within(screen.getByText('Your bank').closest('.glass'))
     expect(panel.getAllByText('Supported')).toHaveLength(5)
-    expect(panel.getAllByText('Coming soon')).toHaveLength(5)
+    expect(panel.queryByText('Coming soon')).toBeNull()
+    expect(panel.queryByText(/live bank feed|roadmap/i)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Upload a statement' }))
     expect(onNav).toHaveBeenCalledWith('documents')
   })

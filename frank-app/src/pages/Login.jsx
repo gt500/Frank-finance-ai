@@ -10,7 +10,7 @@ function inputStyle(hasError = false) {
   }
 }
 
-export function Login({ onLogin, onStartOnboarding, onResetRequest }) {
+export function Login({ onLogin, onStartOnboarding, onResetRequest, onHome }) {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
@@ -173,6 +173,7 @@ export function Login({ onLogin, onStartOnboarding, onResetRequest }) {
             }}>
               Start your free trial →
             </button>
+            {onHome && <button type="button" onClick={onHome} style={{ marginTop: 14, background: 'none', border: 'none', color: C.sub, fontSize: 13, cursor: 'pointer', padding: 0, fontFamily: FONT_BODY }}>← Back to home</button>}
           </div>
 
         </div>

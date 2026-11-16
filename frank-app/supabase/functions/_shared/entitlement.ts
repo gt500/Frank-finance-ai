@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { PACK_AI_REQUESTS, planFor } from "./packs.js"
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const TRIAL_DAYS = 14
@@ -36,6 +37,19 @@ export async function checkEntitlement(userId: string): Promise<Entitlement> {
   const cap = plan === "trial" ? TRIAL_DAILY_CAP : plan === "partner" ? PARTNER_DAILY_CAP : PAID_DAILY_CAP
   if (row.count > cap) {
     return { ok: false, reason: plan === "trial" ? "Daily trial AI limit reached. Upgrade for more." : "You've reached today's Zeeder AI limit — it resets at midnight (UTC)." }
+  }
+  // The pack's monthly allowance of questions and document reads. Our own partner workspaces are exempt.
+  if (plan !== "partner") {
+    const { data: t, error: tErr } = await admin.from("tenants").select("profile").eq("id", p.tenant_id).maybeSingle()
+    if (tErr) return fail("tenant lookup", tErr)
+    const pack = planFor({ tenantId: p.tenant_id, subscription: plan === "trial" ? null : { plan }, chosen: t?.profile?.plan, trialStart: t?.profile?.trialStart }) as keyof typeof PACK_AI_REQUESTS
+    const monthStart = new Date().toISOString().slice(0, 8) + "01"
+    const { data: days, error: mErr } = await admin.from("ai_usage").select("count").eq("tenant_id", p.tenant_id).gte("day", monthStart)
+    if (mErr) return fail("monthly usage read", mErr)
+    const used = (days ?? []).reduce((n: number, d: { count: number }) => n + d.count, 0)
+    if (used > PACK_AI_REQUESTS[pack]) {
+      return { ok: false, reason: `You've used all ${PACK_AI_REQUESTS[pack]} Zeeder AI questions and document reads in your ${pack[0].toUpperCase() + pack.slice(1)} pack this month. Upgrade for more, or wait until next month.` }
+    }
   }
   return { ok: true, plan }
 }

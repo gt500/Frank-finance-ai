@@ -8,12 +8,15 @@ import { money, statementViews } from '../../lib/statementRows'
 import { Card, Empty } from '../shared'
 import { Field, Notice, inputStyle } from '../invoices/fields'
 import { RecordTransaction } from '../statements/RecordTransaction'
+import { usePlanAccess } from '../PlanGate'
 import { StatementSheet } from '../statements/StatementSheet'
 import { Adjustments } from '../statements/Adjustments'
 
 const TABS = [['income', 'Income statement'], ['balance', 'Financial position'], ['cashFlow', 'Cash flows'], ['equity', 'Changes in equity'], ['trial', 'Trial balance']]
 
 export function FinancialStatements() {
+  const { can } = usePlanAccess()
+  const tabs = TABS.filter(([id]) => id === 'income' || can('fullStatements'))
   const today = todaySA()
   const [kind, setKind] = useState('month')
   const [custom, setCustom] = useState({ from: today.slice(0, 8) + '01', to: today })
@@ -88,7 +91,7 @@ export function FinancialStatements() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn-ghost" onClick={() => window.print()} disabled={!views}>Print or save as PDF</button>
-          <button type="button" className="btn-gold" onClick={() => { setRecording(!recording); setPostError('') }}>{recording ? 'Close' : 'Record a transaction'}</button>
+          {can('recording') && <button type="button" className="btn-gold" onClick={() => { setRecording(!recording); setPostError('') }}>{recording ? 'Close' : 'Record a transaction'}</button>}
         </div>
       </div>
       {rangeError && <Notice kind="error">{rangeError}</Notice>}
@@ -107,14 +110,14 @@ export function FinancialStatements() {
 
       {views && !empty && <>
         <div role="tablist" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {TABS.map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'btn-gold' : 'btn-ghost'} onClick={() => setTab(id)}>{label}</button>)}
+          {tabs.map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'btn-gold' : 'btn-ghost'} onClick={() => setTab(id)}>{label}</button>)}
         </div>
         <StatementSheet business={business} view={views[tab]} />
         {tab === 'income' && <Movements statements={statements} />}
         <Card title="Notes"><ul style={{ margin: 0, paddingLeft: 18, color: C.soft, fontSize: 13, lineHeight: 1.7 }}>{statements.notes.map((n) => <li key={n}>{n}</li>)}</ul></Card>
       </>}
 
-      <Adjustments onChanged={() => setReloadKey((k) => k + 1)} />
+      {can('adjustments') && <Adjustments onChanged={() => setReloadKey((k) => k + 1)} />}
 
       <Recorded entries={recorded} busy={busy} onReverse={reverse} />
     </div>

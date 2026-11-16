@@ -1,21 +1,12 @@
-import { useState } from 'react'
+import { useState, useId, cloneElement } from 'react'
 import { C, FONT_BODY } from '../lib/theme'
+import { PLANS, PLAN_ORDER, priceText } from '../lib/plans'
+import { LEGAL } from './legalContent'
 
 const SECTORS = [
   'Retail', 'Food & Beverage', 'Early Childhood Education', 'Healthcare',
   'Construction & Property', 'Professional Services', 'Logistics & Transport',
   'Manufacturing', 'Agriculture', 'Technology', 'Other',
-]
-
-const PLANS = [
-  {
-    id: 'starter', name: 'Starter', price: 499, badge: null,
-    features: ['Up to 3 users', 'Bank statement upload', 'Debtors & Creditors', 'Basic reports', 'Ask Zeeder AI (50/mo)'],
-  },
-  {
-    id: 'growth', name: 'Growth', price: 999, badge: 'MOST POPULAR',
-    features: ['Unlimited users', 'Bank reconciliation', 'Full financial suite', 'Advanced AI reports', 'Ask Zeeder AI (unlimited)', 'Priority support'],
-  },
 ]
 
 const baseInput = {
@@ -37,14 +28,16 @@ const btnBack = {
   color: C.sub, fontSize: 13, cursor: 'pointer', fontFamily: FONT_BODY,
 }
 
+// The label is tied to its input, and a problem is announced to screen readers.
 function Field({ label, error, children }) {
+  const id = useId()
   return (
     <div>
-      <label style={{ fontSize: 11, color: C.dim, letterSpacing: 1.5, textTransform: 'uppercase', display: 'block', marginBottom: 7 }}>
+      <label htmlFor={id} style={{ fontSize: 11, color: C.dim, letterSpacing: 1.5, textTransform: 'uppercase', display: 'block', marginBottom: 7 }}>
         {label}
       </label>
-      {children}
-      {error && <div style={{ fontSize: 11, color: C.danger, marginTop: 5 }}>{error}</div>}
+      {cloneElement(children, { id, 'aria-invalid': error ? true : undefined, 'aria-describedby': error ? `${id}-err` : undefined })}
+      {error && <div id={`${id}-err`} role="alert" style={{ fontSize: 11, color: C.danger, marginTop: 5 }}>{error}</div>}
     </div>
   )
 }
@@ -67,22 +60,24 @@ function friendlyAuthError(message) {
   return message
 }
 
-export function Onboarding({ onComplete, onBack }) {
+export function Onboarding({ onComplete, onBack, initialPlan }) {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
     businessName: '', sector: '', location: '', staff: '',
-    plan: 'growth',
+    plan: PLAN_ORDER.includes(initialPlan) ? initialPlan : 'growth',
   })
+  const [consent, setConsent] = useState(false)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
 
   async function handleEnter() {
+    if (!consent) return
     setSubmitError(null)
     setSubmitting(true)
-    const result = await onComplete(form)
+    const result = await onComplete({ ...form, consent: true })
     if (!result?.ok) {
       setSubmitError(friendlyAuthError(result?.error) || 'Something went wrong creating your account')
       setSubmitting(false)
@@ -163,7 +158,7 @@ export function Onboarding({ onComplete, onBack }) {
 
       {/* Step card */}
       <div style={{
-        width: '100%', maxWidth: step === 2 ? 660 : 480,
+        width: '100%', maxWidth: step === 2 ? 900 : 480,
         background: C.card, border: `1px solid ${C.border}`,
         borderRadius: 12, padding: '36px 40px',
         boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
@@ -173,7 +168,7 @@ export function Onboarding({ onComplete, onBack }) {
         {step === 2 && <StepPlan form={form} set={set} onNext={handleNext} onBack={() => setStep(1)} />}
         {step === 3 && (
           <StepReady
-            form={form} onEnter={handleEnter}
+            form={form} onEnter={handleEnter} consent={consent} setConsent={setConsent}
             submitting={submitting} error={submitError} needsConfirmation={needsConfirmation}
           />
         )}
@@ -266,22 +261,23 @@ function StepPlan({ form, set, onNext, onBack }) {
         <div style={{ fontSize: 13, color: C.sub }}>Start with a 14-day free trial. Cancel any time.</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-        {PLANS.map(plan => {
+      <div role="radiogroup" aria-label="Choose a pack" style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        {PLAN_ORDER.map(id => {
+          const plan = PLANS[id]
           const active = form.plan === plan.id
           return (
-            <div key={plan.id} onClick={() => set('plan', plan.id)} style={{
-              flex: 1, padding: '22px 24px', borderRadius: 8, cursor: 'pointer',
+            <button type="button" role="radio" aria-checked={active} key={plan.id} onClick={() => set('plan', plan.id)} style={{
+              flex: '1 1 200px', padding: '22px 24px', borderRadius: 8, cursor: 'pointer',
               border: `2px solid ${active ? C.frank : C.border}`,
               background: active ? C.frankMid : C.bg,
-              position: 'relative',
+              position: 'relative', textAlign: 'left', fontFamily: 'inherit', color: 'inherit',
               transition: 'border-color 0.15s',
             }}>
               {plan.badge && (
                 <div style={{
                   position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)',
                   background: C.frank, color: '#000', fontSize: 9, fontWeight: 800,
-                  letterSpacing: 1.5, padding: '2px 12px', borderRadius: 10, whiteSpace: 'nowrap',
+                  letterSpacing: 1.5, padding: '2px 12px', borderRadius: 10, whiteSpace: 'nowrap', textTransform: 'uppercase',
                 }}>
                   {plan.badge}
                 </div>
@@ -296,17 +292,17 @@ function StepPlan({ form, set, onNext, onBack }) {
                 <span style={{ fontSize: 16, fontWeight: 800, color: active ? C.frank : C.text }}>{plan.name}</span>
               </div>
               <div style={{ fontSize: 26, fontWeight: 800, color: active ? C.frank : C.text, fontFamily: 'var(--mono)', marginBottom: 18 }}>
-                R {plan.price}<span style={{ fontSize: 12, fontWeight: 400, color: C.sub }}>/mo</span>
+                {priceText(plan)}<span style={{ fontSize: 12, fontWeight: 400, color: C.sub }}>/mo</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {plan.features.map(f => (
+                {plan.highlights.map(f => (
                   <div key={f} style={{ fontSize: 12, color: active ? C.frank : C.sub, display: 'flex', gap: 8 }}>
-                    <span style={{ color: active ? C.frank : C.dim, flexShrink: 0 }}>✓</span>
+                    <span aria-hidden="true" style={{ color: active ? C.frank : C.dim, flexShrink: 0 }}>✓</span>
                     <span>{f}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </button>
           )
         })}
       </div>
@@ -323,8 +319,8 @@ function StepPlan({ form, set, onNext, onBack }) {
   )
 }
 
-function StepReady({ form, onEnter, submitting, error, needsConfirmation }) {
-  const plan = PLANS.find(p => p.id === form.plan)
+function StepReady({ form, onEnter, consent, setConsent, submitting, error, needsConfirmation }) {
+  const plan = PLANS[form.plan]
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
@@ -344,7 +340,7 @@ function StepReady({ form, onEnter, submitting, error, needsConfirmation }) {
           ['Business', form.businessName],
           ['Sector', form.sector],
           ['Location', form.location],
-          ['Plan', `${plan?.name} · R ${plan?.price}/mo (14-day trial)`],
+          ['Plan', `${plan?.name} · ${priceText(plan)}/mo (14-day trial)`],
           ['Email', form.email],
         ].map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
@@ -389,13 +385,23 @@ function StepReady({ form, onEnter, submitting, error, needsConfirmation }) {
           Click it, then sign in to enter your dashboard.
         </div>
       ) : (
-        <button onClick={onEnter} disabled={submitting}
-          style={{
-            ...btnPrimary, width: '100%', padding: '15px', fontSize: 15,
-            opacity: submitting ? 0.6 : 1, cursor: submitting ? 'default' : 'pointer',
-          }}>
-          {submitting ? 'Creating your workspace…' : 'Enter my dashboard →'}
-        </button>
+        <>
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: C.sub, lineHeight: 1.5, marginBottom: 16, cursor: 'pointer' }}>
+            <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18, flexShrink: 0, accentColor: C.frank }} />
+            <span>
+              I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: C.frank }}>terms of use</a> and
+              {' '}the <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.frank }}>privacy notice</a>, and I
+              {' '}consent to {LEGAL.company} processing my information, including by AI, as described there.
+            </span>
+          </label>
+          <button onClick={onEnter} disabled={submitting || !consent}
+            style={{
+              ...btnPrimary, width: '100%', padding: '15px', fontSize: 15,
+              opacity: submitting || !consent ? 0.5 : 1, cursor: submitting || !consent ? 'not-allowed' : 'pointer',
+            }}>
+            {submitting ? 'Creating your workspace…' : 'Enter my dashboard →'}
+          </button>
+        </>
       )}
     </>
   )

@@ -16,6 +16,7 @@ const APP_URL = Deno.env.get("APP_URL")! // e.g. https://app.zeederfinance.co.za
 const PLANS: Record<string, number> = {
   starter: 49900, // R499.00 in cents
   growth: 99900, // R999.00 in cents
+  pro: 199900, // R1 999.00 in cents
 }
 
 Deno.serve(withCors(async (req) => {
